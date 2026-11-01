@@ -36,10 +36,12 @@ Exchange rate · MXN amount**.
 ### With Docker (everything in containers)
 
 ```bash
-make env          # create backend/.env from .env-sample when missing
-make template     # create the PDF template from invoice.sample.html
-make docker-up    # build and start MySQL + API + UI
+make start        # env + template, build, start, wait until healthy, open the UI
 ```
+
+`make start` is idempotent: it creates `backend/.env` and the PDF template if they are
+missing, rebuilds only what changed, waits for the API and the UI to answer, then prints
+the URLs and opens the browser. `make stop` shuts everything down keeping the volumes.
 
 Open **http://127.0.0.1:8080**. The containers are `tax-platform-db` (MySQL 8.4),
 `tax-platform-api` (uvicorn) and `tax-platform-web` (nginx serving the built SPA and
@@ -147,8 +149,14 @@ only stores their paths. That keeps the door open for moving PDFs to S3 by chang
 
 ## Commands
 
+The Makefile is deliberately thin: anything longer than a couple of lines lives in
+`scripts/` (`start.sh`, `check.sh`, `smoke.sh`, `db.sh`, `db-up.sh`, plus `lib.sh` with the
+shared helpers).
+
 ```
 make              list every command
+make start        everything in Docker, ready to use
+make stop         stop the stack
 make dev          API + UI
 make smoke        creates an invoice and checks listing, detail, PDF, HTML and 404
 make invoices     latest 20 invoices as a table

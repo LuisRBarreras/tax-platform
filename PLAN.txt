@@ -101,6 +101,13 @@ Everything runs locally: SQLite for metadata, files on disk, SMTP for delivery.
 - The schema already stores `pdf_path` / `proof_path`, so moving files to S3 only means
   changing those values and the read/write code.
 
+### Tooling — Makefile cleanup (2026-11-01)
+- `make start` boots the whole stack: creates `.env` and the template when missing, builds,
+  starts, waits for API and UI, prints the URLs and opens the browser.
+- `make stop` stops the stack keeping the volumes.
+- The shell logic moved to `scripts/` (`lib.sh` with shared helpers, then `start.sh`,
+  `check.sh`, `smoke.sh`, `db.sh`, `db-up.sh`), so the Makefile only maps names to scripts.
+
 ## Decisions worth remembering
 
 - **MySQL, not SQLite.** SQLite served well locally, but the project is now fully

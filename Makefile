@@ -1,10 +1,8 @@
 # ============================================================================
-#  Invoice Automation — development commands
+#  Invoice Automation — developer commands
 #
-#  make            -> this help
-#  make install    -> dependencies (Python venv + node_modules)
-#  make dev        -> API (:3000) and UI (:5173) together
-#  make smoke      -> creates an invoice and checks listing / PDF / HTML
+#  Heavy lifting lives in scripts/ (start, check, smoke, db); this file is just
+#  the entry point. Run `make` to see every command.
 # ============================================================================
 
 SHELL := /bin/bash
@@ -14,13 +12,12 @@ FRONTEND := frontend
 VENV     := $(BACKEND)/.venv
 PY       := $(VENV)/bin/python
 PIP      := $(VENV)/bin/pip
+SCRIPTS  := scripts
 
-TEMPLATE        := $(BACKEND)/resources/template/invoice.html
-TEMPLATE_SAMPLE := $(BACKEND)/resources/template/invoice.sample.html
-
-API_PORT ?= 3000
-WEB_PORT ?= 5173
-HOST     ?= 127.0.0.1
+HOST            ?= 127.0.0.1
+API_PORT        ?= 3000
+WEB_PORT        ?= 5173
+WEB_DOCKER_PORT ?= 8080
 
 # Node: the system one is v16 and Vite 7 needs 20+. Prefer .tooling/node,
 # re-signed ad-hoc so macOS allows loading native addons.
@@ -38,21 +35,28 @@ endif
 export PATH := $(CURDIR)/.tooling:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help install env template check api api-reload web dev build test test-api test-web smoke test-invoice docker-up docker-down docker-logs docker-reset db-up \
-        db db-peek invoices migrate clean clean-all
+.PHONY: help install env template start stop check dev api web build \
+        test test-api test-web smoke invoices db db-peek migrate \
+        db-up docker-up docker-down docker-logs docker-reset clean clean-all
 
-# ---------------------------------------------------------------- help ------
+# ---------------------------------------------------------------- lifecycle --
 help: ## Show this help
+	@awk 'BEGIN {FS = ":.*?## "; print ""; print "  Invoice Automation"; print ""} \
+	  /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
-	@echo "  Invoice Automation"
-	@echo ""
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
-	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
-	@echo ""
-	@echo "  API: http://$(HOST):$(API_PORT)   UI: http://$(HOST):$(WEB_PORT)"
+	@echo "  UI: http://$(HOST):$(WEB_DOCKER_PORT)   API: http://$(HOST):$(API_PORT)"
 	@echo ""
 
-# --------------------------------------------------------------- install ----
+start: ## Start everything in Docker and wait until it answers
+	@$(SCRIPTS)/start.sh
+
+stop: ## Stop the stack (keeps the data volumes)
+	@docker compose down
+	@echo "Stack stopped (data kept in the volumes)."
+
+check: ## Check tools, services and files
+	@$(SCRIPTS)/check.sh
+
 install: $(VENV)/.installed ## Install backend and frontend dependencies
 	cd $(FRONTEND) && $(PNPM_CMD) install
 
@@ -62,129 +66,80 @@ $(VENV)/.installed: $(BACKEND)/requirements.txt
 	$(PIP) install --quiet -r $(BACKEND)/requirements.txt
 	@touch $@
 
-env: ## Create backend/.env from .env-sample when missing
-	@if [ -f $(BACKEND)/.env ]; then \
-	  echo "backend/.env already exists - leaving it alone."; \
-	else \
-	  cp $(BACKEND)/.env-sample $(BACKEND)/.env; \
-	  echo "Created backend/.env from .env-sample (SMTP_DRY_RUN=1: no emails sent)."; \
-	  echo "Fill in SMTP_USER / SMTP_PASSWORD / MAIL_FROM for real sending."; \
-	fi
+env: ## Create backend/.env from the sample when missing
+	@[ -f $(BACKEND)/.env ] || cp $(BACKEND)/.env-sample $(BACKEND)/.env
+	@echo "backend/.env: $$([ -f $(BACKEND)/.env ] && echo present || echo missing)"
 
 template: ## Create the invoice template from the sample when missing
-	@if [ -f $(TEMPLATE) ]; then \
-	  echo "$(TEMPLATE) already exists - leaving it alone."; \
-	else \
-	  cp $(TEMPLATE_SAMPLE) $(TEMPLATE); \
-	  echo "Created $(TEMPLATE) from the sample."; \
-	fi
+	@[ -f $(BACKEND)/resources/template/invoice.html ] \
+	  || cp $(BACKEND)/resources/template/invoice.sample.html $(BACKEND)/resources/template/invoice.html
+	@echo "template: $$([ -f $(BACKEND)/resources/template/invoice.html ] && echo present || echo missing)"
 
-check: ## Check the environment (python, node, pnpm, docker, servers)
-	@printf "python venv : "; test -x $(PY) && $(PY) --version || echo "MISSING (make install)"
-	@printf "node        : "; $(NODE) --version
-	@printf "pnpm        : "; $(PNPM) --version 2>/dev/null || echo "not found"
-	@printf "docker      : "; docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',' || echo "not installed"
-	@printf "database    : "; docker exec tax-platform-db mysql -utax -ptaxpass tax_platform -N -e "SELECT CONCAT(COUNT(*), ' invoices') FROM invoices;" 2>/dev/null || echo "not running (make db-up / make docker-up)"
-	@printf "API         : "; curl -sf -m 2 http://$(HOST):$(API_PORT)/api/invoices >/dev/null && echo "up" || echo "down"
-	@printf "UI          : "; curl -sf -m 2 http://$(HOST):$(WEB_PORT)/ >/dev/null && echo "up" || echo "down"
-
-# --------------------------------------------------------------- servers ----
-api: ## Start the API (uvicorn)
-	cd $(BACKEND) && exec $(CURDIR)/$(PY) -m uvicorn app.main:app --host $(HOST) --port $(API_PORT)
-
-api-reload: ## Start the API with autoreload
-	cd $(BACKEND) && exec $(CURDIR)/$(PY) -m uvicorn app.main:app --host $(HOST) --port $(API_PORT) --reload
-
-web: ## Start the UI (Vite)
-	cd $(FRONTEND) && exec $(NODE) ./node_modules/vite/bin/vite.js --host $(HOST) --port $(WEB_PORT)
-
+# ---------------------------------------------------------------- local dev --
 dev: ## Start API and UI together (Ctrl+C stops both)
-	@echo "API → http://$(HOST):$(API_PORT)"
-	@echo "UI  → http://$(HOST):$(WEB_PORT)"
 	@trap 'kill 0' EXIT INT TERM; \
 	  ( cd $(BACKEND) && exec $(CURDIR)/$(PY) -m uvicorn app.main:app --host $(HOST) --port $(API_PORT) ) & \
 	  ( cd $(FRONTEND) && exec $(NODE) ./node_modules/vite/bin/vite.js --host $(HOST) --port $(WEB_PORT) ) & \
 	  wait
 
-test: test-api test-web ## Run backend and frontend test suites
+api: ## Start the API (uvicorn)
+	cd $(BACKEND) && exec $(CURDIR)/$(PY) -m uvicorn app.main:app --host $(HOST) --port $(API_PORT)
 
-test-api: ## Backend tests (pytest)
+web: ## Start the UI (Vite)
+	cd $(FRONTEND) && exec $(NODE) ./node_modules/vite/bin/vite.js --host $(HOST) --port $(WEB_PORT)
+
+build: ## Typecheck + production build of the frontend
+	cd $(FRONTEND) && $(PNPM_CMD) run build
+
+# -------------------------------------------------------------------- tests --
+test: test-api test-web ## Run both test suites (88 tests)
+
+test-api: ## Backend tests (pytest, needs MySQL)
 	@$(PY) -c "import pytest" 2>/dev/null || $(PIP) install --quiet -r $(BACKEND)/requirements-dev.txt
-	cd $(BACKEND) && exec $(CURDIR)/$(PY) -m pytest
+	cd $(BACKEND) && $(CURDIR)/$(PY) -m pytest
 
 test-web: ## Frontend tests (vitest)
 	cd $(FRONTEND) && $(PNPM_CMD) run test
 
-build: ## Typecheck + production build of the frontend (dist/)
-	cd $(FRONTEND) && $(PNPM_CMD) run build
+smoke: ## Create an invoice and check the main endpoints
+	@$(SCRIPTS)/smoke.sh
 
-# ----------------------------------------------------------------- tests ----
-smoke: ## Create an invoice and verify listing, PDF and HTML against the API
-	@curl -sf -m 3 http://$(HOST):$(API_PORT)/api/invoices >/dev/null \
-	  || { echo "The API is not responding on :$(API_PORT). Start it with 'make api'."; exit 1; }
-	@echo "== POST /api/invoices =="
-	@ID=$$(curl -s -X POST http://$(HOST):$(API_PORT)/api/invoices \
-	    -H "Content-Type: application/json" \
-	    -d '{"date":"'$$(date +%Y-%m-%d)'","items":[{"description":"Software Service","quantity":1,"unit-price":3600}]}' \
-	  | tee /tmp/invoice_smoke.json | $(PY) -c "import sys,json; print(json.load(sys.stdin)['invoice-id'])"); \
-	  echo "   id: $$ID"; \
-	  echo "== GET endpoints =="; \
-	  printf "   listing : %s\n" "$$(curl -s -o /dev/null -w '%{http_code}' http://$(HOST):$(API_PORT)/api/invoices)"; \
-	  printf "   detail  : %s\n" "$$(curl -s -o /dev/null -w '%{http_code}' http://$(HOST):$(API_PORT)/api/invoices/$$ID)"; \
-	  printf "   PDF     : %s\n" "$$(curl -s -o /tmp/invoice_smoke.pdf -w '%{http_code} %{content_type}' http://$(HOST):$(API_PORT)/api/invoices/$$ID/pdf) ($$(wc -c < /tmp/invoice_smoke.pdf | tr -d ' ') bytes)"; \
-	  printf "   HTML    : %s\n" "$$(curl -s -o /dev/null -w '%{http_code} %{content_type}' http://$(HOST):$(API_PORT)/api/invoices/$$ID/html)"; \
-	  printf "   bad id  : %s (expected 404)\n" "$$(curl -s -o /dev/null -w '%{http_code}' 'http://$(HOST):$(API_PORT)/api/invoices/..%%2F..%%2Fetc/html')"
+# ------------------------------------------------------------------ database --
+db: ## Invoice count
+	@$(SCRIPTS)/db.sh count
 
-test-invoice: smoke ## Alias of smoke
+db-peek: ## Table structure + latest invoices
+	@$(SCRIPTS)/db.sh peek
 
-# --------------------------------------------------------------- database ---
-db-up: ## Start the local MySQL container used for development
-	@docker start tax-platform-mysql >/dev/null 2>&1 || \
-	  docker run -d --name tax-platform-mysql -p 127.0.0.1:3306:3306 \
-	    -e MYSQL_ROOT_PASSWORD=devroot -e MYSQL_DATABASE=tax_platform \
-	    -e MYSQL_USER=tax -e MYSQL_PASSWORD=taxpass \
-	    -v tax_platform_mysql:/var/lib/mysql mysql:8.4
-	@echo "MySQL on 127.0.0.1:3306 (tax_platform / user tax)"
+invoices: ## Latest 20 invoices
+	@$(SCRIPTS)/db.sh list
 
-docker-up: ## Build and start the whole stack (UI on :8080, API on :3000)
+migrate: ## Import invoices from the old SQLite file into MySQL
+	cd $(BACKEND) && $(CURDIR)/$(PY) scripts/migrate_sqlite_to_mysql.py
+
+db-up: ## Start the standalone MySQL container (dev without Docker for the app)
+	@$(SCRIPTS)/db-up.sh
+
+# -------------------------------------------------------------------- docker --
+docker-up: ## Build and start the stack
 	docker compose up -d --build
 
-docker-down: ## Stop the stack (keeps the database volume)
+docker-down: ## Stop the stack
 	docker compose down
-
-docker-reset: ## Stop the stack and delete the database volume (destructive)
-	docker compose down -v
 
 docker-logs: ## Follow the stack logs
 	docker compose logs -f --tail=100
 
-db: ## MySQL row count
-	@docker exec tax-platform-db mysql -utax -ptaxpass tax_platform \
-	  -N -e "SELECT CONCAT(COUNT(*), ' invoices') FROM invoices;" 2>/dev/null \
-	  || docker exec tax-platform-mysql mysql -utax -ptaxpass tax_platform \
-	       -N -e "SELECT CONCAT(COUNT(*), ' invoices') FROM invoices;" 2>/dev/null \
-	  || echo "MySQL is not running (make db-up or make docker-up)"
+docker-reset: ## Stop the stack and delete the data volumes (destructive)
+	docker compose down -v
 
-db-peek: ## Table structure + latest invoices
-	@docker exec -i tax-platform-db mysql -utax -ptaxpass tax_platform \
-	  -e "DESCRIBE invoices; SELECT LEFT(id,18) AS id, number, date, total, status FROM invoices ORDER BY created_at DESC LIMIT 10;" 2>/dev/null \
-	  || echo "MySQL is not running (make db-up or make docker-up)"
-
-invoices: ## List the latest 20 invoices
-	@docker exec -i tax-platform-db mysql -utax -ptaxpass tax_platform \
-	  -e "SELECT LEFT(id,18) AS id, number, date, total, status FROM invoices ORDER BY created_at DESC LIMIT 20;" 2>/dev/null \
-	  || echo "MySQL is not running (make db-up or make docker-up)"
-
-migrate: ## Import invoices from the old SQLite file into MySQL
-	cd $(BACKEND) && exec $(CURDIR)/$(PY) scripts/migrate_sqlite_to_mysql.py
-
-# ----------------------------------------------------------------- clean ----
+# --------------------------------------------------------------------- clean --
 clean: ## Remove caches and build artifacts
-	rm -rf $(BACKEND)/__pycache__ $(BACKEND)/app/__pycache__ \
-	       $(BACKEND)/scripts/__pycache__ $(BACKEND)/.pytest_cache .pytest_cache \
+	rm -rf $(BACKEND)/__pycache__ $(BACKEND)/app/__pycache__ $(BACKEND)/scripts/__pycache__ \
+	       $(BACKEND)/tests/__pycache__ $(BACKEND)/.pytest_cache .pytest_cache \
 	       $(FRONTEND)/dist $(FRONTEND)/node_modules/.vite
-	@echo "Caches cleared (database and PDFs are NOT touched)."
+	@echo "Caches cleared (database, PDFs and proofs are NOT touched)."
 
-clean-all: clean ## Also remove venv and node_modules
+clean-all: clean ## Also remove the venv and node_modules
 	rm -rf $(VENV) $(FRONTEND)/node_modules
 	@echo "Environment removed. Recreate it with 'make install'."
