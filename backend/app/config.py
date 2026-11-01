@@ -44,11 +44,12 @@ TMP_INVOICES_DIR = ".tmp/invoices"
 PROOFS_DIR = ".tmp/proofs"
 OUTBOX_DIR = ".tmp/outbox"
 
-# --- Database --------------------------------------------------------------
-# Absolute on purpose: independent from the cwd uvicorn is launched from.
-DATABASE_PATH = os.environ.get(
-    "DATABASE_PATH", os.path.join(BACKEND_DIR, "data", "invoices.db")
-)
+# --- Database (MySQL) -------------------------------------------------------
+MYSQL_HOST = os.environ.get("MYSQL_HOST", "127.0.0.1")
+MYSQL_PORT = _int("MYSQL_PORT", "3306")
+MYSQL_USER = os.environ.get("MYSQL_USER", "tax")
+MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "taxpass")
+MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE", "tax_platform")
 
 # --- Invoice parties (printed in the PDF; never captured by the UI) ---------
 # Empty by default: real values belong in backend/.env, never in the repository.

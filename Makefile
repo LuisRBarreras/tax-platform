@@ -14,7 +14,6 @@ FRONTEND := frontend
 VENV     := $(BACKEND)/.venv
 PY       := $(VENV)/bin/python
 PIP      := $(VENV)/bin/pip
-DB       := $(BACKEND)/data/invoices.db
 
 TEMPLATE        := $(BACKEND)/resources/template/invoice.html
 TEMPLATE_SAMPLE := $(BACKEND)/resources/template/invoice.sample.html
@@ -39,7 +38,7 @@ endif
 export PATH := $(CURDIR)/.tooling:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help install env template check api api-reload web dev build test test-api test-web smoke test-invoice \
+.PHONY: help install env template check api api-reload web dev build test test-api test-web smoke test-invoice docker-up docker-down docker-logs docker-reset db-up \
         db db-peek invoices migrate clean clean-all
 
 # ---------------------------------------------------------------- help ------
@@ -80,12 +79,12 @@ template: ## Create the invoice template from the sample when missing
 	  echo "Created $(TEMPLATE) from the sample."; \
 	fi
 
-check: ## Check the environment (python, node, pnpm, sqlite, servers)
+check: ## Check the environment (python, node, pnpm, docker, servers)
 	@printf "python venv : "; test -x $(PY) && $(PY) --version || echo "MISSING (make install)"
 	@printf "node        : "; $(NODE) --version
 	@printf "pnpm        : "; $(PNPM) --version 2>/dev/null || echo "not found"
-	@printf "sqlite3     : "; command -v sqlite3 >/dev/null && sqlite3 --version | cut -d' ' -f1 || echo "not installed"
-	@printf "database    : "; test -f $(DB) && echo "$(DB) ($$(sqlite3 $(DB) 'SELECT COUNT(*) FROM invoices' 2>/dev/null) invoices)" || echo "created when the API starts"
+	@printf "docker      : "; docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',' || echo "not installed"
+	@printf "database    : "; docker exec tax-platform-db mysql -utax -ptaxpass tax_platform -N -e "SELECT CONCAT(COUNT(*), ' invoices') FROM invoices;" 2>/dev/null || echo "not running (make db-up / make docker-up)"
 	@printf "API         : "; curl -sf -m 2 http://$(HOST):$(API_PORT)/api/invoices >/dev/null && echo "up" || echo "down"
 	@printf "UI          : "; curl -sf -m 2 http://$(HOST):$(WEB_PORT)/ >/dev/null && echo "up" || echo "down"
 
@@ -139,23 +138,45 @@ smoke: ## Create an invoice and verify listing, PDF and HTML against the API
 test-invoice: smoke ## Alias of smoke
 
 # --------------------------------------------------------------- database ---
-db: ## SQLite path and size
-	@test -f $(DB) \
-	  && echo "$(DB) - $$(sqlite3 $(DB) 'SELECT COUNT(*) FROM invoices') invoices, $$(du -h $(DB) | cut -f1)" \
-	  || echo "$(DB) does not exist yet (created when the API starts)"
+db-up: ## Start the local MySQL container used for development
+	@docker start tax-platform-mysql >/dev/null 2>&1 || \
+	  docker run -d --name tax-platform-mysql -p 127.0.0.1:3306:3306 \
+	    -e MYSQL_ROOT_PASSWORD=devroot -e MYSQL_DATABASE=tax_platform \
+	    -e MYSQL_USER=tax -e MYSQL_PASSWORD=taxpass \
+	    -v tax_platform_mysql:/var/lib/mysql mysql:8.4
+	@echo "MySQL on 127.0.0.1:3306 (tax_platform / user tax)"
 
-db-peek: ## Schema + latest invoices via sqlite3
-	@test -f $(DB) || { echo "$(DB) does not exist"; exit 1; }
-	@sqlite3 -header -column $(DB) "PRAGMA table_info(invoices);"
-	@echo "---"
-	@sqlite3 -header -column $(DB) "SELECT substr(id,1,18) AS id, date, printf('%.2f', total) AS total, status FROM invoices ORDER BY date DESC, created_at DESC LIMIT 10;"
+docker-up: ## Build and start the whole stack (UI on :8080, API on :3000)
+	docker compose up -d --build
+
+docker-down: ## Stop the stack (keeps the database volume)
+	docker compose down
+
+docker-reset: ## Stop the stack and delete the database volume (destructive)
+	docker compose down -v
+
+docker-logs: ## Follow the stack logs
+	docker compose logs -f --tail=100
+
+db: ## MySQL row count
+	@docker exec tax-platform-db mysql -utax -ptaxpass tax_platform \
+	  -N -e "SELECT CONCAT(COUNT(*), ' invoices') FROM invoices;" 2>/dev/null \
+	  || docker exec tax-platform-mysql mysql -utax -ptaxpass tax_platform \
+	       -N -e "SELECT CONCAT(COUNT(*), ' invoices') FROM invoices;" 2>/dev/null \
+	  || echo "MySQL is not running (make db-up or make docker-up)"
+
+db-peek: ## Table structure + latest invoices
+	@docker exec -i tax-platform-db mysql -utax -ptaxpass tax_platform \
+	  -e "DESCRIBE invoices; SELECT LEFT(id,18) AS id, number, date, total, status FROM invoices ORDER BY created_at DESC LIMIT 10;" 2>/dev/null \
+	  || echo "MySQL is not running (make db-up or make docker-up)"
 
 invoices: ## List the latest 20 invoices
-	@test -f $(DB) || { echo "$(DB) does not exist"; exit 1; }
-	@sqlite3 -header -column $(DB) "SELECT substr(id,1,18) AS id, date, printf('%.2f', total) AS total, status, pdf_path IS NOT NULL AS pdf FROM invoices ORDER BY date DESC, created_at DESC LIMIT 20;"
+	@docker exec -i tax-platform-db mysql -utax -ptaxpass tax_platform \
+	  -e "SELECT LEFT(id,18) AS id, number, date, total, status FROM invoices ORDER BY created_at DESC LIMIT 20;" 2>/dev/null \
+	  || echo "MySQL is not running (make db-up or make docker-up)"
 
-migrate: ## Import old invoices (Mongo/JSON) into SQLite
-	cd $(BACKEND) && $(CURDIR)/$(PY) scripts/migrate_to_sqlite.py
+migrate: ## Import invoices from the old SQLite file into MySQL
+	cd $(BACKEND) && exec $(CURDIR)/$(PY) scripts/migrate_sqlite_to_mysql.py
 
 # ----------------------------------------------------------------- clean ----
 clean: ## Remove caches and build artifacts

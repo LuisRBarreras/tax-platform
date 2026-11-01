@@ -1,0 +1,68 @@
+# Invoice Automation — full stack
+#
+#   docker compose up -d --build     http://127.0.0.1:8080
+#   docker compose down              stop (data keeps living in the volume)
+#   docker compose down -v           stop and delete the database volume
+#
+# Secrets come from `backend/.env` when present, otherwise from the defaults below
+# (development only — change them before exposing anything).
+
+services:
+  db:
+    image: mysql:8.4
+    container_name: tax-platform-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-tax_platform}
+      MYSQL_USER: ${MYSQL_USER:-tax}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-taxpass}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build: ./backend
+    container_name: tax-platform-api
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER:-tax}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-taxpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-tax_platform}
+      # Invoice parties and SMTP come from this file when it exists.
+      SMTP_DRY_RUN: ${SMTP_DRY_RUN:-1}
+    volumes:
+      # Read-only config: python-dotenv reads it inside the container and the
+      # multi-line values (addresses) survive. Secrets never enter the image.
+      - ./backend/.env:/app/.env:ro
+      - api_files:/app/.tmp
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    container_name: tax-platform-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  db_data:
+  api_files:

@@ -1,13 +1,14 @@
-"""Invoice storage: metadata in SQLite, PDFs on disk."""
+"""Invoice storage: metadata in MySQL, PDFs on disk."""
 import json
 import re
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from . import db
 
 INVOICE_ID_RE = re.compile(r"^INV-[A-Za-z0-9-]{1,80}$")
 
-# table columns -> JSON keys exposed by the API
+# JSON key -> table column
 COLUMNS = (
     "id", "number", "client_name", "client_email", "client_address", "date", "due_date",
     "subtotal", "tax", "total", "status", "bank_info", "items_json", "pdf_path",
@@ -21,17 +22,24 @@ def is_valid_invoice_id(invoice_id: str) -> bool:
     return bool(INVOICE_ID_RE.match(invoice_id))
 
 
+def _num(value: Any) -> Optional[float]:
+    """DECIMAL comes back as Decimal, which FastAPI cannot serialize."""
+    if value is None:
+        return None
+    return float(value) if isinstance(value, Decimal) else value
+
+
 def _row_to_invoice(row: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "invoice-id": row["id"],
-        "invoice-number": row["number"],
+        "invoice-number": row["number"] or "",
         "client-name": row["client_name"],
         "client-email": row["client_email"],
         "client-address": row["client_address"],
         "items": json.loads(row["items_json"] or "[]"),
-        "subtotal": row["subtotal"],
-        "tax": row["tax"],
-        "total": row["total"],
+        "subtotal": _num(row["subtotal"]),
+        "tax": _num(row["tax"]),
+        "total": _num(row["total"]),
         "due-date": row["due_date"],
         "date": row["date"],
         "bank-info": row["bank_info"],
@@ -41,8 +49,8 @@ def _row_to_invoice(row: Dict[str, Any]) -> Dict[str, Any]:
         "work-from": row["work_from"],
         "work-to": row["work_to"],
         "deposit-date": row["deposit_date"],
-        "exchange-rate": row["exchange_rate"],
-        "pesos": row["pesos"],
+        "exchange-rate": _num(row["exchange_rate"]),
+        "pesos": _num(row["pesos"]),
         "sent-at": row["sent_at"],
         "sent-to": row["sent_to"],
         "created-at": row["created_at"],
@@ -77,60 +85,72 @@ def save_invoice(invoice: Dict[str, Any]) -> Dict[str, Any]:
         "created_at": invoice.get("created-at", ""),
     }
 
-    placeholders = ", ".join(f":{c}" for c in COLUMNS)
-    updates = ", ".join(f"{c} = excluded.{c}" for c in COLUMNS if c != "id")
+    placeholders = ", ".join(f"%({c})s" for c in COLUMNS)
+    updates = ", ".join(f"{c} = new.{c}" for c in COLUMNS if c != "id")
 
     with db.connection() as conn:
-        conn.execute(
-            f"INSERT INTO invoices ({', '.join(COLUMNS)}) VALUES ({placeholders}) "
-            f"ON CONFLICT(id) DO UPDATE SET {updates}",
-            values,
-        )
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"INSERT INTO invoices ({', '.join(COLUMNS)}) VALUES ({placeholders}) "
+                f"AS new ON DUPLICATE KEY UPDATE {updates}",
+                values,
+            )
 
-    print(f"Invoice saved to SQLite: {values['id']}")
+    print(f"Invoice saved to MySQL: {values['id']}")
     return invoice
 
 
 def mark_sent(invoice_id: str, to: str, sent_at: str) -> None:
     """Mark the invoice as sent."""
     with db.connection() as conn:
-        conn.execute(
-            "UPDATE invoices SET status = 'sent', sent_at = ?, sent_to = ? WHERE id = ?",
-            (sent_at, to, invoice_id),
-        )
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE invoices SET status = 'sent', sent_at = %s, sent_to = %s WHERE id = %s",
+                (sent_at, to, invoice_id),
+            )
 
 
 def set_proof_path(invoice_id: str, proof_path: Optional[str]) -> None:
     """Store the uploaded proof path (None clears it)."""
     with db.connection() as conn:
-        conn.execute("UPDATE invoices SET proof_path = ? WHERE id = ?", (proof_path, invoice_id))
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE invoices SET proof_path = %s WHERE id = %s", (proof_path, invoice_id)
+            )
 
 
 def set_pdf_path(invoice_id: str, pdf_path: str) -> None:
     """Store where the PDF lives (a local path today, an S3 key tomorrow)."""
     with db.connection() as conn:
-        conn.execute("UPDATE invoices SET pdf_path = ? WHERE id = ?", (pdf_path, invoice_id))
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE invoices SET pdf_path = %s WHERE id = %s", (pdf_path, invoice_id)
+            )
 
 
 def get_all_invoices() -> List[Dict[str, Any]]:
     """All invoices, newest first."""
     with db.connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM invoices ORDER BY created_at DESC, date DESC"
-        ).fetchall()
-    return [_row_to_invoice(dict(row)) for row in rows]
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM invoices ORDER BY created_at DESC, date DESC")
+            rows = cursor.fetchall()
+    return [_row_to_invoice(row) for row in rows]
 
 
 def get_invoices_page(page: int = 1, per_page: int = 10) -> tuple[List[Dict[str, Any]], int]:
     """One page of invoices (newest first) plus the total record count."""
     offset = (page - 1) * per_page
     with db.connection() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
-        rows = conn.execute(
-            "SELECT * FROM invoices ORDER BY created_at DESC, date DESC LIMIT ? OFFSET ?",
-            (per_page, offset),
-        ).fetchall()
-    return [_row_to_invoice(dict(row)) for row in rows], total
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) AS total FROM invoices")
+            total = cursor.fetchone()["total"]
+
+            cursor.execute(
+                "SELECT * FROM invoices ORDER BY created_at DESC, date DESC LIMIT %s OFFSET %s",
+                (per_page, offset),
+            )
+            rows = cursor.fetchall()
+    return [_row_to_invoice(row) for row in rows], total
 
 
 def get_invoice(invoice_id: str) -> Optional[Dict[str, Any]]:
@@ -139,18 +159,24 @@ def get_invoice(invoice_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     with db.connection() as conn:
-        row = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM invoices WHERE id = %s", (invoice_id,))
+            row = cursor.fetchone()
 
-    return _row_to_invoice(dict(row)) if row else None
+    return _row_to_invoice(row) if row else None
 
 
 def delete_invoice(invoice_id: str) -> bool:
     """Delete the row (the PDF on disk is left alone)."""
     if not is_valid_invoice_id(invoice_id):
         return False
+
     with db.connection() as conn:
-        cur = conn.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
-    return cur.rowcount == 1
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM invoices WHERE id = %s", (invoice_id,))
+            deleted = cursor.rowcount
+
+    return deleted == 1
 
 
 db.init_db()

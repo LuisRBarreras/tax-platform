@@ -1,0 +1,10 @@
+.git
+.tooling
+.github
+backend/.venv
+backend/.tmp
+backend/data
+backend/__pycache__
+frontend/node_modules
+frontend/dist
+**/.DS_Store

@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.tmp
+data
+.env
+.env.backup*
+resources/service-account-key.json
+test-results

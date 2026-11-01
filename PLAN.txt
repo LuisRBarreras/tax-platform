@@ -66,29 +66,48 @@ Everything runs locally: SQLite for metadata, files on disk, SMTP for delivery.
 - UI: **Enviar / Reenviar** button, confirmation screen showing the rendered email,
   editable subject and recipient, and the real attachments.
 
-### Phase 4 — S3 backup: NOT STARTED
-- The schema already stores `pdf_path` / `proof_path`, so moving files to S3 only means
-  changing those values and the read/write code.
+### Phase 4 — Docker + MySQL: DONE (2026-11-01)
+- Storage moved from SQLite to **MySQL 8.4** (PyMySQL, still no ORM). Schema uses
+  VARCHAR/DECIMAL; DECIMAL comes back as `Decimal`, converted to float in the store.
+  Upsert is `INSERT ... AS new ON DUPLICATE KEY UPDATE`.
+- `scripts/migrate_sqlite_to_mysql.py` moved the existing invoices (48 at the time).
+- Three containers: `db` (MySQL with healthcheck), `api` (uvicorn + WeasyPrint libs),
+  `web` (nginx serving the built SPA and proxying `/api` to the API).
+- `backend/.env` is mounted read-only into the API container: secrets stay out of the
+  image and multi-line values (addresses) work, which `env_file` cannot do.
+- `docker/mysql-init.sql` creates `tax_platform_test` and grants the app user, so the
+  test suite can use the same server.
+- Tests now run against MySQL (`tax_platform_test`) and clean up: rows are deleted before
+  each test, and the database plus the temp directory are removed at session end.
+- Commands: `make docker-up`, `make docker-down`, `make docker-reset`, `make docker-logs`,
+  `make db-up`, plus `make db` / `make db-peek` / `make invoices` against MySQL.
 
-### Phase 5 — Tests: DONE (2026-11-01)
-- `pytest` + `TestClient`, 61 tests, ~2 seconds.
-- Isolation: `tests/conftest.py` sets `DATABASE_PATH` to a temp file, forces
-  `SMTP_DRY_RUN=1` and changes the cwd to a temp directory **before** importing app
-  modules, so neither the real database nor `.tmp/` is touched.
-- Coverage: domain rules, SQLite store (roundtrip, ordering, pagination, state), template
+### Phase 6 — Tests: DONE (2026-11-01)
+- `pytest` + `TestClient`, 61 tests, ~3 seconds.
+- Isolation: `tests/conftest.py` points the app at `tax_platform_test`, forces
+  `SMTP_DRY_RUN=1` and moves the cwd to a temporary directory, so neither the real
+  database nor `.tmp/` is touched.
+- **Clean-up:** rows are deleted before each test; at session end the test database is
+  dropped and the temporary directory removed.
+- Coverage: domain rules, MySQL store (roundtrip, ordering, pagination, state), template
   filters and escaping, email building (attachments, subject, injection) and every API
   endpoint including upload limits and the recipient allowlist.
-- `make test` runs the suite and installs `backend/requirements-dev.txt` when needed.
 - Frontend: **Vitest + Testing Library (jsdom), 27 tests** — formatting helpers, URL
   builders, `InvoiceForm` (validation, pesos auto/manual, payload, errors) and
   `InvoiceList` (rows, status labels, pagination, empty state).
 - `make test` runs both suites (88 tests); `make test-api` and `make test-web` run one.
 
+### Phase 7 — S3 backup: NOT STARTED
+- The schema already stores `pdf_path` / `proof_path`, so moving files to S3 only means
+  changing those values and the read/write code.
+
 ## Decisions worth remembering
 
-- **SQLite, not MongoDB.** MongoDB was tried first and discarded: another daemon for
-  30 rows. SQLite is a file, ships with Python, and the store interface stayed the same.
-  `scripts/migrate_to_sqlite.py` imports the old Mongo/JSON records.
+- **MySQL, not SQLite.** SQLite served well locally, but the project is now fully
+  dockerised and MySQL gives one server for app and tests with real types and upserts.
+  The store interface did not change, only the SQL dialect.
+- **Docker without an ORM.** PyMySQL keeps the queries visible; the only MySQL-specific
+  code is the upsert and the DECIMAL conversion.
 - **Files outside the database.** The DB stores paths only; this keeps it at ~30 KB and
   makes the S3 migration trivial.
 - **Invoice number is user input.** `id` (`INV-<uuid>`) is the internal key used in URLs

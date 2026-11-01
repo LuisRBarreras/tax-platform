@@ -26,17 +26,42 @@ Exchange rate · MXN amount**.
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.13 · FastAPI 0.162 · uvicorn |
-| Data | SQLite (stdlib `sqlite3`, no ORM) |
+| Data | MySQL 8.4 via PyMySQL (no ORM) |
 | PDF | Jinja2 + WeasyPrint, HTML template + embedded Noto Sans fonts |
 | Email | `smtplib` + `email` (MIME multipart, attachments) |
 | Frontend | React 19 + Vite 7 + TypeScript |
 
 ## Getting started
 
+### With Docker (everything in containers)
+
+```bash
+make env          # create backend/.env from .env-sample when missing
+make template     # create the PDF template from invoice.sample.html
+make docker-up    # build and start MySQL + API + UI
+```
+
+Open **http://127.0.0.1:8080**. The containers are `tax-platform-db` (MySQL 8.4),
+`tax-platform-api` (uvicorn) and `tax-platform-web` (nginx serving the built SPA and
+proxying `/api` to the API). Data lives in the `db_data` volume, generated files in
+`api_files`.
+
+```bash
+make docker-logs     # follow the logs
+make docker-down     # stop, keep the database volume
+make docker-reset    # stop and delete the volume (destructive)
+```
+
+`backend/.env` is mounted read-only into the API container, so secrets never enter the
+image; the multi-line address values survive as-is.
+
+### Without Docker (local Python + Node, MySQL in a container)
+
 ```bash
 make install     # Python venv + node_modules
 make env         # create backend/.env from .env-sample when missing
 make template    # create the PDF template from invoice.sample.html
+make db-up       # MySQL on 127.0.0.1:3306
 make dev         # API on :3000 and UI on :5173
 ```
 
@@ -68,7 +93,7 @@ backend/
 │   ├── handlers.py       logic: invoices, payment proofs and email
 │   ├── schemas.py        Pydantic request models
 │   ├── config.py         settings from .env
-│   ├── db.py             SQLite schema and migrations
+│   ├── db.py             MySQL schema and migrations
 │   ├── invoice_store.py  queries + pagination
 │   ├── invoice.py        business rules
 │   ├── pdf.py            template rendering + WeasyPrint
@@ -78,11 +103,15 @@ backend/
 │   │   ├── invoice.sample.html generic template (versioned)
 │   │   └── invoice.html        real template (gitignored, `make template`)
 │   └── fonts/                  Noto Sans (extracted from the original invoice)
-├── scripts/migrate_to_sqlite.py
-├── data/invoices.db      database (gitignored)
+├── scripts/migrate_sqlite_to_mysql.py
+├── Dockerfile
 └── .tmp/                 PDFs, proofs and test emails (gitignored)
 frontend/
+├── Dockerfile
+├── nginx.conf            serves the SPA and proxies /api
 └── src/                  wizard, paginated list and modals
+docker-compose.yml        db + api + web
+docker/mysql-init.sql     test database and grants
 ```
 
 ## API
@@ -104,7 +133,7 @@ Interactive docs: **http://127.0.0.1:3000/docs**
 
 ## Data
 
-One row per invoice in `backend/data/invoices.db`:
+One row per invoice in the `invoices` table (MySQL):
 
 - `id` (`INV-<uuid>`, internal key), `number` (the number you type and the PDF shows)
 - dates: `date`, `work_from`, `work_to`, `deposit_date`
@@ -112,9 +141,9 @@ One row per invoice in `backend/data/invoices.db`:
 - status: `status` (`created` / `sent`), `sent_at`, `sent_to`
 - `items_json`, `pdf_path`, `proof_path`, `created_at`
 
-Files live outside the database, under `backend/.tmp/`: the database only stores their
-paths. That keeps the door open for moving PDFs to S3 by changing `pdf_path`, with no
-schema change.
+Files live outside the database, under `backend/.tmp/` (a volume in Docker): the database
+only stores their paths. That keeps the door open for moving PDFs to S3 by changing
+`pdf_path`, with no schema change.
 
 ## Commands
 
@@ -123,9 +152,11 @@ make              list every command
 make dev          API + UI
 make smoke        creates an invoice and checks listing, detail, PDF, HTML and 404
 make invoices     latest 20 invoices as a table
-make db           database path and size
-make db-peek      schema + latest 10 invoices
-make migrate      import old invoices (Mongo/JSON) into SQLite
+make db-up        start the local MySQL container (dev without Docker for the app)
+make docker-up    build and start the whole stack
+make db           invoices stored in MySQL
+make db-peek      table structure + latest 10 invoices
+make migrate      import invoices from the old SQLite file into MySQL
 make build        typecheck + frontend build
 make clean        caches (never touches the database or the PDFs)
 ```
@@ -138,8 +169,10 @@ make test-api    # pytest only (61)
 make test-web    # vitest only (27)
 ```
 
-**Backend** runs against a throwaway SQLite database and a temporary working directory,
-with email in dry-run, so it never touches `backend/data/`, `backend/.tmp/` or the network.
+**Backend** runs against a throwaway MySQL database (`tax_platform_test`) and a temporary
+working directory, with email in dry-run. The database is dropped and the directory removed
+when the session ends, so it never touches the real data or the network. MySQL must be
+running (`make db-up` or `make docker-up`).
 
 | File | Covers |
 |---|---|
@@ -173,7 +206,7 @@ Test-only dependencies: `backend/requirements-dev.txt` and the frontend devDepen
 
 - **No authentication.** The API listens on `127.0.0.1`; meant for local use.
 - **Single client.** Client data comes from `.env`, not from the database.
-- **No backup.** `.tmp/` and `data/` are gitignored and there is no scheduled backup.
+- **No backup.** The MySQL volume and `.tmp/` have no scheduled backup.
 - **Old PDFs are not regenerated** when the template changes: the preview always uses the
   current template, but a stored PDF is the one generated at the time.
 - **Subset fonts.** Noto Sans was extracted from the original PDF; it covers the alphabet
