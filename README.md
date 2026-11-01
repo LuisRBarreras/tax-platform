@@ -130,6 +130,26 @@ make build        typecheck + frontend build
 make clean        caches (never touches the database or the PDFs)
 ```
 
+## Tests
+
+```bash
+make test        # 61 tests, ~2 s
+```
+
+The suite runs against a throwaway SQLite database and a temporary working directory, with
+email in dry-run, so it never touches `backend/data/`, `backend/.tmp/` or the network.
+
+| File | Covers |
+|---|---|
+| `tests/test_invoice.py` | totals, ids, date fallback, client defaults, pesos override |
+| `tests/test_invoice_store.py` | save/get roundtrip, upsert, ordering, pagination, sent state, delete |
+| `tests/test_pdf.py` | money/qty/date filters, invoice number fallback, **HTML escaping** |
+| `tests/test_emailer.py` | periods, pesos, subject override, header injection, attachments, dry run |
+| `tests/test_api.py` | every endpoint: status codes, pagination, upload limits, allowlist, security headers |
+
+Test-only dependencies live in `backend/requirements-dev.txt`; `make test` installs them
+when `pytest` is missing.
+
 ## Conventions
 
 - **Code, comments and documentation in English.**

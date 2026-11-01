@@ -39,7 +39,7 @@ endif
 export PATH := $(CURDIR)/.tooling:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help install env template check api api-reload web dev build smoke test-invoice \
+.PHONY: help install env template check api api-reload web dev build test smoke test-invoice \
         db db-peek invoices migrate clean clean-all
 
 # ---------------------------------------------------------------- help ------
@@ -106,6 +106,10 @@ dev: ## Start API and UI together (Ctrl+C stops both)
 	  ( cd $(BACKEND) && exec $(CURDIR)/$(PY) -m uvicorn app.main:app --host $(HOST) --port $(API_PORT) ) & \
 	  ( cd $(FRONTEND) && exec $(NODE) ./node_modules/vite/bin/vite.js --host $(HOST) --port $(WEB_PORT) ) & \
 	  wait
+
+test: ## Run the backend test suite (pytest)
+	@$(PY) -c "import pytest" 2>/dev/null || $(PIP) install --quiet -r $(BACKEND)/requirements-dev.txt
+	cd $(BACKEND) && exec $(CURDIR)/$(PY) -m pytest
 
 build: ## Typecheck + production build of the frontend (dist/)
 	cd $(FRONTEND) && $(PNPM_CMD) run build

@@ -70,6 +70,16 @@ Everything runs locally: SQLite for metadata, files on disk, SMTP for delivery.
 - The schema already stores `pdf_path` / `proof_path`, so moving files to S3 only means
   changing those values and the read/write code.
 
+### Phase 5 — Tests: DONE (2026-11-01)
+- `pytest` + `TestClient`, 61 tests, ~2 seconds.
+- Isolation: `tests/conftest.py` sets `DATABASE_PATH` to a temp file, forces
+  `SMTP_DRY_RUN=1` and changes the cwd to a temp directory **before** importing app
+  modules, so neither the real database nor `.tmp/` is touched.
+- Coverage: domain rules, SQLite store (roundtrip, ordering, pagination, state), template
+  filters and escaping, email building (attachments, subject, injection) and every API
+  endpoint including upload limits and the recipient allowlist.
+- `make test` runs the suite and installs `backend/requirements-dev.txt` when needed.
+
 ## Decisions worth remembering
 
 - **SQLite, not MongoDB.** MongoDB was tried first and discarded: another daemon for
