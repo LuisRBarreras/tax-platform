@@ -53,6 +53,25 @@ Simpler: `make dev` from the repository root starts API and UI together.
 | `src/api.ts` | HTTP client |
 | `src/types.ts` | Mirrors the backend JSON (kebab-case keys) |
 
+## Tests
+
+```bash
+pnpm test          # or `make test-web` from the repository root
+pnpm test:watch    # watch mode
+```
+
+Vitest + Testing Library on jsdom. `src/test/setup.ts` registers `@testing-library/jest-dom`.
+
+| File | Covers |
+|---|---|
+| `src/invoiceDefaults.test.ts` | period/short-date formatting, local `todayISO` |
+| `src/api.test.ts` | PDF/proof/preview URL builders |
+| `src/components/InvoiceForm.test.tsx` | validation, pesos auto-calc + manual override, payload shape, error handling |
+| `src/components/InvoiceList.test.tsx` | rows, status labels, pagination, empty state, proof preview |
+
+Note: date inputs are set with `fireEvent.change` in tests. Typing into a prefilled
+`<input type="date">` clears it, which is a jsdom/user-event quirk, not a UI bug.
+
 ## Backend
 
 The UI needs the backend on port 3000 (`vite.config.ts` proxies `/api` there):

@@ -79,6 +79,10 @@ Everything runs locally: SQLite for metadata, files on disk, SMTP for delivery.
   filters and escaping, email building (attachments, subject, injection) and every API
   endpoint including upload limits and the recipient allowlist.
 - `make test` runs the suite and installs `backend/requirements-dev.txt` when needed.
+- Frontend: **Vitest + Testing Library (jsdom), 27 tests** — formatting helpers, URL
+  builders, `InvoiceForm` (validation, pesos auto/manual, payload, errors) and
+  `InvoiceList` (rows, status labels, pagination, empty state).
+- `make test` runs both suites (88 tests); `make test-api` and `make test-web` run one.
 
 ## Decisions worth remembering
 

@@ -133,11 +133,13 @@ make clean        caches (never touches the database or the PDFs)
 ## Tests
 
 ```bash
-make test        # 61 tests, ~2 s
+make test        # backend + frontend (88 tests, ~3 s)
+make test-api    # pytest only (61)
+make test-web    # vitest only (27)
 ```
 
-The suite runs against a throwaway SQLite database and a temporary working directory, with
-email in dry-run, so it never touches `backend/data/`, `backend/.tmp/` or the network.
+**Backend** runs against a throwaway SQLite database and a temporary working directory,
+with email in dry-run, so it never touches `backend/data/`, `backend/.tmp/` or the network.
 
 | File | Covers |
 |---|---|
@@ -147,8 +149,17 @@ email in dry-run, so it never touches `backend/data/`, `backend/.tmp/` or the ne
 | `tests/test_emailer.py` | periods, pesos, subject override, header injection, attachments, dry run |
 | `tests/test_api.py` | every endpoint: status codes, pagination, upload limits, allowlist, security headers |
 
-Test-only dependencies live in `backend/requirements-dev.txt`; `make test` installs them
-when `pytest` is missing.
+**Frontend** uses Vitest + Testing Library in jsdom:
+
+| File | Covers |
+|---|---|
+| `src/invoiceDefaults.test.ts` | work-period formatting, short dates, local today |
+| `src/api.test.ts` | URL builders |
+| `src/components/InvoiceForm.test.tsx` | validation gating, pesos auto-calc and manual override, payload, error state |
+| `src/components/InvoiceList.test.tsx` | rows, Spanish status labels, pagination, empty state, proof preview |
+
+Test-only dependencies: `backend/requirements-dev.txt` and the frontend devDependencies
+(`vitest`, `jsdom`, `@testing-library/*`).
 
 ## Conventions
 
