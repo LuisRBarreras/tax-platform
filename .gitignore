@@ -1,0 +1,63 @@
+# ============================================================================
+#  Secrets — never commit (checked before the first push)
+# ============================================================================
+
+# Local env files. `.env-sample` is the documented template and IS versioned.
+.env
+.env*
+!.env-sample
+
+# Google / OAuth / service account credentials
+service-account*.json
+*credentials*.json
+client_secret*.json
+gifted-proxy*.json
+*.pem
+*.key
+*.p12
+
+# ============================================================================
+#  Local-only assets
+# ============================================================================
+
+# The real invoice template is tailored to one client; each install keeps its
+# own copy. `invoice.sample.html` is the generic, versioned starting point:
+#   make template            (copies the sample when the real one is missing)
+backend/resources/template/invoice.html
+
+# ============================================================================
+#  Generated data
+# ============================================================================
+
+backend/.tmp/
+backend/data/
+
+# ============================================================================
+#  Dependencies / virtualenvs
+# ============================================================================
+
+.venv/
+node_modules/
+
+# ============================================================================
+#  Build output and caches
+# ============================================================================
+
+dist/
+.vite/
+__pycache__/
+*.pyc
+.pytest_cache/
+.cpcache/
+
+# ============================================================================
+#  Local tooling (re-signed Node binary, ~116 MB)
+# ============================================================================
+
+.tooling/
+
+# ============================================================================
+#  OS
+# ============================================================================
+
+.DS_Store

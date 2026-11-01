@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice {{ invoiceNumber }}</title>
+  <style>
+    /* Generic starting point. Replace it with your own layout:
+       keep the {{ placeholders }} and the renderer works the same way. */
+    @page { size: A4; margin: 18mm 16mm; }
+
+    body {
+      margin: 0;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      color: #111;
+    }
+
+    .top { display: flex; justify-content: space-between; gap: 24pt; }
+
+    .party-label {
+      font-size: 8pt;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #6b7280;
+      margin-bottom: 2pt;
+    }
+
+    .party { white-space: pre-line; }
+    .party + .party { margin-top: 14pt; }
+    .party strong { display: block; margin-bottom: 2pt; }
+
+    .doc-title {
+      font-size: 26pt;
+      font-weight: bold;
+      letter-spacing: .04em;
+      text-align: right;
+      margin: 0 0 6pt;
+    }
+
+    .meta { text-align: right; font-size: 9.5pt; color: #374151; }
+    .meta div + div { margin-top: 2pt; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 28pt;
+    }
+
+    th {
+      text-align: left;
+      font-size: 8.5pt;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #6b7280;
+      border-bottom: 1px solid #111;
+      padding: 0 0 6pt;
+    }
+
+    td { padding: 8pt 0; border-bottom: 1px solid #e5e7eb; }
+
+    .right { text-align: right; }
+
+    .total-row td {
+      border-bottom: none;
+      border-top: 2px solid #111;
+      padding-top: 8pt;
+      font-weight: bold;
+      font-size: 12pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="party-label">From</div>
+      <div class="party"><strong>{{ issuerName }}</strong>{{ issuerAddress }}</div>
+
+      <div class="party">
+        <div class="party-label">Bill to</div>
+        <strong>{{ clientName }}</strong>{{ clientAddress }}
+      </div>
+    </div>
+
+    <div>
+      <div class="doc-title">INVOICE</div>
+      <div class="meta">
+        <div>#{{ invoiceNumber }}</div>
+        <div>{{ date | invoicedate }}</div>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td class="right">{{ item.amount | money }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total-row">
+        <td class="right">Total</td>
+        <td class="right">{{ total | money }}</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

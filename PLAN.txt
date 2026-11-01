@@ -1,0 +1,126 @@
+# Invoice Automation — implementation log
+
+Working notes for this project: what was built, what was decided, and what is still open.
+The canonical source of truth for behaviour is the code plus `README.md`; this file keeps
+the reasoning and the order in which things happened.
+
+Last updated: 2026-11-01
+
+## Goal
+
+Automate the recurring routine around one client invoice:
+
+1. Generate the invoice PDF from an HTML template (no Google Docs, no manual editing).
+2. Attach the payment proof (a transfer screenshot or PDF).
+3. Email both to the client with a table of work period, deposit date, salary, exchange
+   rate and MXN amount.
+
+Everything runs locally: SQLite for metadata, files on disk, SMTP for delivery.
+
+## Architecture
+
+```
+[React wizard]  --HTTP-->  [FastAPI]
+                              ├── routes.py        URL -> handler
+                              ├── handlers.py      validate / render / persist / send
+                              ├── invoice_store.py SQLite (metadata)
+                              ├── pdf.py           Jinja2 + WeasyPrint
+                              ├── emailer.py       MIME + SMTP
+                              └── .tmp/            PDFs, proofs, outbox
+```
+
+## Status by phase
+
+### Phase 0 — PDF from an HTML template: DONE
+- Jinja2 template rendered with WeasyPrint, no external services.
+- PDF and metadata saved on every creation.
+
+### Phase 1 — Payment proof upload: DONE (2026-10-31)
+- `POST /api/invoices/{id}/upload-proof` (multipart, field `proof`).
+- Validates invoice existence (404) and MIME type (415): jpg, png, webp, heic, pdf.
+- 10 MB limit (413) checked from `UploadFile.size` before reading; empty file -> 400.
+- Stored as `.tmp/proofs/INV-xxx.<ext>`; a previous proof with another extension is removed.
+- Path recorded in the `proof_path` column (SQLite migrates itself with `ALTER TABLE`).
+- `GET /api/invoices/{id}/proof` serves it for the UI.
+- UI column **Comprobante**: `Subir` / `Ver` / `Reemplazar`.
+
+### Phase 2 — React frontend: DONE
+- React 19 + Vite 7 + TypeScript, `frontend/`.
+- **Three-step wizard**: invoice -> payment proof -> review and send.
+- Invoice form captures: invoice number, invoice date, salary (USD), exchange rate,
+  work period (from/to) and deposit date.
+- `Pesos (MXN)` auto-computes `salary × rate` and becomes manual once edited
+  (the ↻ button restores automatic mode). Stored in `pesos`; `NULL` means "compute".
+- Paginated list (10 per page) ordered by `created_at` DESC, with a **Creada** column.
+- In-app previews: invoice (HTML in a sandboxed iframe) and payment proof (image).
+
+### Phase 3 — Email: DONE (real sending verified)
+- `POST /api/invoices/{id}/send` (`{to, subject}`) + `GET /api/mail/recipients`.
+- `app/emailer.py` builds a multipart/alternative message (plain text + HTML) and attaches
+  the PDF plus the payment proof when present.
+- Body follows the agreed wording: greeting, list of attachments, and a table with
+  `Work period | Deposit date | Salary | Exchange rate | MXN`.
+- Recipients come from the `MAIL_RECIPIENTS` allowlist; anything else returns 400.
+- **Dry-run** (`SMTP_DRY_RUN=1`, the default) writes `.tmp/outbox/INV-xxx.eml` instead.
+- Marks the invoice as `sent` with `sent_at` / `sent_to`.
+- UI: **Enviar / Reenviar** button, confirmation screen showing the rendered email,
+  editable subject and recipient, and the real attachments.
+
+### Phase 4 — S3 backup: NOT STARTED
+- The schema already stores `pdf_path` / `proof_path`, so moving files to S3 only means
+  changing those values and the read/write code.
+
+## Decisions worth remembering
+
+- **SQLite, not MongoDB.** MongoDB was tried first and discarded: another daemon for
+  30 rows. SQLite is a file, ships with Python, and the store interface stayed the same.
+  `scripts/migrate_to_sqlite.py` imports the old Mongo/JSON records.
+- **Files outside the database.** The DB stores paths only; this keeps it at ~30 KB and
+  makes the S3 migration trivial.
+- **Invoice number is user input.** `id` (`INV-<uuid>`) is the internal key used in URLs
+  and filenames; `number` is what the PDF prints. A blank number falls back to the id.
+- **Client data is not in the UI.** Issuer and client live in `.env`
+  (`INVOICE_ISSUER_*`, `INVOICE_CLIENT_*`) and are printed by the template.
+- **The real template is not versioned.** It is tailored to one client; the repository
+  ships `invoice.sample.html` (different layout, same variables) and `make template`
+  copies it when the real one is missing.
+- **Errors in Spanish, code in English.** API messages and UI text are Spanish because the
+  users are; comments, docstrings and docs are English.
+
+## Template fidelity
+
+The PDF replicates the client's original invoice, measured from the source PDF with
+PyMuPDF rather than guessed:
+
+| Aspect | Original | Now |
+|---|---|---|
+| Page | 612×792 pt (Letter) | exact |
+| Fonts | NotoSans 9/12 pt + ArialMT 10 pt | Noto Sans extracted from the PDF, embedded via `@font-face` |
+| Header | `From:` / `Business Name:` with values lined up at 36 pt | same |
+| Bill to | includes the client's tax id | same (from `INVOICE_CLIENT_ADDRESS`) |
+| Date | `Oct-30th` | `invoicedate` filter |
+| Table | 2 columns, full border, rows 26/26/41 pt | same |
+
+Verified numerically: every element sits within 0.7 pt of the original and the table lines
+match exactly (218.5 / 244.5 / 270.5 / 311.5 horizontally, 35.5 / 503.5 / 575.5 vertically).
+
+## Security review (2026-11-01)
+
+| Finding | Severity | Status |
+|---|---|---|
+| Jinja without autoescape -> HTML injection in the preview | Medium | fixed (`select_autoescape`) |
+| Dangling commit with personal data in the reflog | Medium | purged (`reflog expire` + `gc --prune=now`) |
+| `.env` and credentials with 644 permissions | Medium | fixed (`chmod 600`) |
+| Upload read fully before size validation | Low | fixed (`proof.size` check first) |
+| No `X-Content-Type-Options` | Low | fixed (middleware) |
+| Dependencies with known CVEs (starlette, pillow, jinja2, weasyprint, dotenv, brotli) | High | upgraded; `pip-audit` clean |
+| Header injection in the email subject | — | not applicable: the library rejects CR/LF |
+| Path traversal on `/pdf`, `/proof`, `/html`, `/api/fonts` | — | not applicable: ids validated, `StaticFiles` |
+| SQL injection | — | not applicable: parameterized queries |
+| No authentication | Accepted | API listens on `127.0.0.1` only |
+
+## Open items
+
+- Optional: regenerate the stored PDFs of older invoices with the current template.
+- Optional: keep the API behind authentication if it is ever exposed beyond localhost.
+- Optional: scheduled backup of `backend/data/` and `backend/.tmp/`.

@@ -1,0 +1,4 @@
+# pnpm 12 blocks post-install scripts unless they are approved.
+# Without this entry `pnpm install` fails with ERR_PNPM_IGNORED_BUILDS (esbuild).
+allowBuilds:
+  esbuild: true
