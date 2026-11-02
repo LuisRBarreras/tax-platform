@@ -207,12 +207,24 @@ def _values(range_a1: str) -> List[List[Any]]:
 
 # ------------------------------------------------------------------ data --
 def headers(refresh: bool = False) -> List[str]:
-    """Header row of the configured tab (cached for the process)."""
+    """Header row of the configured tab (cached for the process).
+
+    The tab has a totals block to the right of the table (SUM/Promedio in row 1);
+    those cells are numbers, so the header row stops at the first non-text cell
+    instead of pretending the totals are columns.
+    """
     global _headers
     if _headers is not None and not refresh:
         return _headers
+
     rows = _values(f"'{tab_name()}'!A1:1")
-    _headers = [str(cell).strip() for cell in rows[0]] if rows else []
+    row = rows[0] if rows else []
+    labels: List[str] = []
+    for cell in row:
+        if not isinstance(cell, str):
+            break
+        labels.append(cell.strip())
+    _headers = labels
     return _headers
 
 

@@ -231,3 +231,17 @@ def test_gid_wins_when_the_name_is_empty(monkeypatch, settings):
     monkeypatch.setattr(settings, "GOOGLE_SHEETS_TAB", "")
 
     assert sheets.tab_name() == "Copy of 2026"
+
+
+def test_header_row_stops_at_the_totals_block(sample_invoice, monkeypatch, settings):
+    """Numbers to the right of the table are a summary, not columns."""
+    monkeypatch.setattr(sheets, "_session", None, raising=False)
+    monkeypatch.setattr(sheets, "_headers", None, raising=False)
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_GID", "")
+    fake = FakeSession(
+        header_row=["Invoice", "Salary", "Total", 445088.75, "Promedio", 63584.1]
+    )
+    monkeypatch.setattr(sheets, "_authorized", lambda: fake)
+
+    assert sheets.headers(refresh=True) == ["Invoice", "Salary", "Total"]
+    assert fake.posts == []
