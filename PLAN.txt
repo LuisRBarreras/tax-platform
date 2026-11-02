@@ -159,6 +159,24 @@ match exactly (218.5 / 244.5 / 270.5 / 311.5 horizontally, 35.5 / 503.5 / 575.5 
 | SQL injection | — | not applicable: parameterized queries |
 | No authentication | Accepted | API listens on `127.0.0.1` only |
 
+## Google Sheets sync (2026-11-02)
+
+Every invoice that is really sent appends one row to the tab `Copy of 2026` of the
+tracker spreadsheet.
+
+| Decision | Why |
+|---|---|
+| `google-auth` + `requests`, no extra client library | both were already pinned; nothing new in the image |
+| Row aligned with the tab's header row | column order and extra columns do not need to be hardcoded |
+| Unknown headers left empty | the sheet can grow without breaking the append |
+| Append after `mark_sent`, failures reported not raised | the email is already out; a sheet problem cannot undo it |
+| Skipped with `SMTP_DRY_RUN=1` or `GOOGLE_SHEETS_ENABLED=0` | tests and dry runs never write to the real sheet |
+| Credentials mounted read-only in compose | `.dockerignore` keeps the key out of the image |
+| `make sheet` | a disabled API or a missing share shows up as a clear message, not a silent failure |
+
+Verified: 12 new tests (mapping, payload, caching, dry-run, permission error, disabled API).
+`make sheet` reports the missing Google Sheets API activation on the real document.
+
 ## Open items
 
 - Optional: regenerate the stored PDFs of older invoices with the current template.

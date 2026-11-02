@@ -15,6 +15,7 @@ from . import emailer
 from . import invoice as invoice_service
 from . import invoice_store as store
 from . import pdf as pdf_service
+from . import sheets
 from .schemas import CreateInvoiceRequest, SendInvoiceRequest
 
 # --------------------------------------------------------------------------
@@ -224,4 +225,7 @@ def send_invoice(invoice_id: str, req: SendInvoiceRequest) -> Dict[str, Any]:
     sent_at = result.get("sent-at") or datetime.now(timezone.utc).isoformat()
     store.mark_sent(invoice_id, recipient, sent_at)
 
-    return {"success": True, "invoice-id": invoice_id, **result}
+    # The email is already out: a spreadsheet problem must not fail the request.
+    sheet = sheets.record_send(invoice, sent_at=sent_at, recipient=recipient)
+
+    return {"success": True, "invoice-id": invoice_id, **result, "sheet": sheet}

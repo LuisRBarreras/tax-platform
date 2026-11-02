@@ -153,6 +153,8 @@ def test_send_in_dry_run_marks_invoice_sent(client, tmp_dir):
 
     assert response.status_code == 200
     assert body["dry-run"] is True
+    # No dry run and no disabled sync may ever append a row.
+    assert body["sheet"]["status"] in {"skipped", "disabled"}
 
     stored = store.get_invoice(invoice_id)
     assert stored["status"] == "sent"

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import EmailConfirm from './EmailConfirm'
 import { formatShortDate, formatWorkPeriod } from '../invoiceDefaults'
-import type { Invoice } from '../types'
+import type { Invoice, SheetResult } from '../types'
 
 interface Props {
   invoice: Invoice
@@ -23,6 +23,7 @@ export default function SendEmailDialog({ invoice, onClose, onSent }: Props) {
   const [dryRun, setDryRun] = useState(false)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [sheet, setSheet] = useState<SheetResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
 
@@ -51,6 +52,7 @@ export default function SendEmailDialog({ invoice, onClose, onSent }: Props) {
     try {
       const res = await api.sendInvoice(invoice['invoice-id'], to)
       setResult(res['dry-run'] ? `Modo prueba: guardado en ${res.path}` : `Enviado a ${res.to}`)
+      setSheet(res.sheet)
       onSent()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar')
@@ -116,6 +118,14 @@ export default function SendEmailDialog({ invoice, onClose, onSent }: Props) {
           )}
 
           {result && <p className="ok">{result}</p>}
+          {sheet?.status === 'appended' && (
+            <p className="ok">Fila agregada al spreadsheet ({sheet.tab}).</p>
+          )}
+          {sheet?.status === 'error' && (
+            <p className="note">
+              El correo salió, pero no se pudo guardar en el spreadsheet: {sheet.message}
+            </p>
+          )}
           {error && <p className="error">{error}</p>}
 
           <div className="modal-footer">

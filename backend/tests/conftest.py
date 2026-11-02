@@ -17,6 +17,8 @@ _TMP = Path(tempfile.mkdtemp(prefix="tax-platform-tests-"))
 
 os.environ["MYSQL_DATABASE"] = "tax_platform_test"
 os.environ["SMTP_DRY_RUN"] = "1"
+# Never reach the real spreadsheet from a test run.
+os.environ["GOOGLE_SHEETS_ENABLED"] = "0"
 os.environ["MAIL_RECIPIENTS"] = "billing@example.com,other@example.com"
 os.environ["INVOICE_ISSUER_NAME"] = "Test Issuer"
 os.environ["INVOICE_ISSUER_ADDRESS"] = "1 Test Street\nTestville"

@@ -47,6 +47,8 @@ services:
       # Read-only config: python-dotenv reads it inside the container and the
       # multi-line values (addresses) survive. Secrets never enter the image.
       - ./backend/.env:/app/.env:ro
+      # Not baked into the image (.dockerignore), mounted when it exists.
+      - ./backend/resources/service-account-key.json:/app/resources/service-account-key.json:ro
       - api_files:/app/.tmp
     ports:
       - "127.0.0.1:3000:3000"

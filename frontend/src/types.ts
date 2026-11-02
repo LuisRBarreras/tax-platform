@@ -54,3 +54,22 @@ export interface CreateInvoiceResponse {
   message: string
   'pdf-size': number
 }
+
+/** Result of appending the sent invoice to the Google Sheets tracker. */
+export interface SheetResult {
+  status: 'appended' | 'skipped' | 'disabled' | 'error'
+  message?: string
+  range?: string
+  tab?: string
+  url?: string
+  to?: string
+}
+
+export interface SendInvoiceResponse {
+  success: boolean
+  'dry-run': boolean
+  to: string
+  subject: string
+  path?: string
+  sheet: SheetResult
+}

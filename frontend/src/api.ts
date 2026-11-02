@@ -2,6 +2,7 @@ import type {
   CreateInvoicePayload,
   CreateInvoiceResponse,
   Invoice,
+  SendInvoiceResponse,
 } from './types'
 
 const BASE_URL = import.meta.env.VITE_API_BASE ?? '/api'
@@ -77,10 +78,10 @@ export const api = {
     }>(`/invoices/${id}/email-preview?to=${encodeURIComponent(to)}`),
 
   sendInvoice: (id: string, to: string, subject?: string) =>
-    request<{ success: boolean; 'dry-run': boolean; to: string; subject: string; path?: string }>(
-      `/invoices/${id}/send`,
-      { method: 'POST', body: JSON.stringify({ to, subject: subject ?? '' }) },
-    ),
+    request<SendInvoiceResponse>(`/invoices/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify({ to, subject: subject ?? '' }),
+    }),
 
   emailPreviewWithSubject: (id: string, to: string, subject = '') =>
     request<{ subject: string; to: string; attachments: string[]; html: string }>(

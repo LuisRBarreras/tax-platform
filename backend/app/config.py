@@ -71,7 +71,12 @@ MAIL_FROM = os.environ.get("MAIL_FROM", "")
 MAIL_RECIPIENTS = os.environ.get("MAIL_RECIPIENTS", "")
 SMTP_DRY_RUN = _bool("SMTP_DRY_RUN", "1")  # por seguridad: por defecto NO envía
 
-# --- Google (inherited from the old Clojure backend; unused today) ----------
+# --- Google Sheets (invoice tracker) ---------------------------------------
+# Every sent invoice appends one row to the tab below. The service account
+# needs the spreadsheet shared with it as Editor, and the Sheets API enabled.
 GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 GOOGLE_SPREADSHEET_ID = os.environ.get("GOOGLE_SPREADSHEET_ID", "")
+GOOGLE_SHEETS_TAB = os.environ.get("GOOGLE_SHEETS_TAB", "Copy of 2026")
+GOOGLE_SHEETS_GID = os.environ.get("GOOGLE_SHEETS_GID", "")  # optional: link to the tab
+GOOGLE_SHEETS_ENABLED = _bool("GOOGLE_SHEETS_ENABLED", "1")
 GOOGLE_DOC_TEMPLATE_ID = os.environ.get("GOOGLE_DOC_TEMPLATE_ID", "")

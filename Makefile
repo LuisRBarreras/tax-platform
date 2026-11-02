@@ -36,7 +36,7 @@ export PATH := $(CURDIR)/.tooling:$(PATH)
 
 .DEFAULT_GOAL := help
 .PHONY: help install env template start stop check dev api web build \
-        test test-api test-web smoke invoices db db-peek migrate \
+        test test-api test-web smoke sheet invoices db db-peek migrate \
         db-up docker-up docker-down docker-logs docker-reset clean clean-all
 
 # ---------------------------------------------------------------- lifecycle --
@@ -92,7 +92,7 @@ build: ## Typecheck + production build of the frontend
 	cd $(FRONTEND) && $(PNPM_CMD) run build
 
 # -------------------------------------------------------------------- tests --
-test: test-api test-web ## Run both test suites (88 tests)
+test: test-api test-web ## Run both test suites (99 tests)
 
 test-api: ## Backend tests (pytest, needs MySQL)
 	@$(PY) -c "import pytest" 2>/dev/null || $(PIP) install --quiet -r $(BACKEND)/requirements-dev.txt
@@ -103,6 +103,9 @@ test-web: ## Frontend tests (vitest)
 
 smoke: ## Create an invoice and check the main endpoints
 	@$(SCRIPTS)/smoke.sh
+
+sheet: ## Check the Google Sheets sync (credentials, tab, columns)
+	@$(SCRIPTS)/sheet.sh
 
 # ------------------------------------------------------------------ database --
 db: ## Invoice count

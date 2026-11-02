@@ -107,13 +107,16 @@ backend/
 │   ├── invoice_store.py  queries + pagination
 │   ├── invoice.py        business rules
 │   ├── pdf.py            template rendering + WeasyPrint
-│   └── emailer.py        MIME, attachments, SMTP and preview
+│   ├── emailer.py        MIME, attachments, SMTP and preview
+│   └── sheets.py         appends the sent invoice to the Google Sheet
 ├── resources/
 │   ├── template/
 │   │   ├── invoice.sample.html generic template (versioned)
 │   │   └── invoice.html        real template (gitignored, `make template`)
 │   └── fonts/                  Noto Sans (extracted from the original invoice)
-├── scripts/migrate_sqlite_to_mysql.py
+├── scripts/
+│   ├── migrate_sqlite_to_mysql.py
+│   └── sheet_check.py    `make sheet` diagnostics
 ├── Dockerfile
 └── .tmp/                 PDFs, proofs and test emails (gitignored)
 frontend/
@@ -136,7 +139,7 @@ docker/mysql-init.sql     test database and grants
 | `POST` | `/api/invoices/{id}/upload-proof` | Uploads the payment proof (multipart, field `proof`) |
 | `GET` | `/api/invoices/{id}/proof` | Returns the payment proof |
 | `GET` | `/api/invoices/{id}/email-preview` | Rendered email, nothing is sent |
-| `POST` | `/api/invoices/{id}/send` | Sends the email (`{to, subject}`) |
+| `POST` | `/api/invoices/{id}/send` | Sends the email (`{to, subject}`) and appends the sheet row |
 | `GET` | `/api/mail/recipients` | Allowed recipients and dry-run status |
 
 Interactive docs: **http://127.0.0.1:3000/docs**
@@ -155,6 +158,48 @@ Files live outside the database, under `backend/.tmp/` (a volume in Docker): the
 only stores their paths. That keeps the door open for moving PDFs to S3 by changing
 `pdf_path`, with no schema change.
 
+## Spreadsheet
+
+Each invoice that is really sent appends **one row** to the tab configured in
+`backend/.env` (`GOOGLE_SHEETS_TAB`, default `Copy of 2026`).
+
+```bash
+make sheet     # does the tab answer? which column gets which value?
+```
+
+```
+credentials  : /app/resources/service-account-key.json
+spreadsheet  : 1i6cydbN9TD5Ebpr4ZLNSpMWC41f5xornMmhLMB3WbUQ
+tab          : Copy of 2026
+enabled      : yes
+rows         : 57
+
+header -> column we fill
+  Fecha Trabajo        -> period
+  Fecha Depósito       -> deposit
+  Salary               -> salary
+  Tipo de cambio       -> rate
+  Pesos                -> pesos
+  Comentarios          -> (se deja vacía)
+```
+
+Three things have to be true, and `make sheet` tells you which one is missing:
+
+1. the **Google Sheets API** is enabled in the Cloud project of the service account;
+2. the spreadsheet is **shared as Editor** with the service account email
+   (it is inside `resources/service-account-key.json`, field `client_email`);
+3. the credentials file exists locally and in the container (compose mounts it
+   read-only; it is never baked into the image).
+
+The row follows the tab's own header row: the columns are matched by name
+(`Fecha Depósito` = `fecha deposito` = `deposit date`), the order does not
+matter and any column we do not recognise is left empty. If the tab has no
+header yet, the five columns of the email table are used.
+
+The spreadsheet is always secondary: if it fails, the email is still sent and
+the UI shows *"El correo salió, pero no se pudo guardar en el spreadsheet"*.
+`SMTP_DRY_RUN=1` never appends anything.
+
 ## Commands
 
 The Makefile is deliberately thin: anything longer than a couple of lines lives in
@@ -167,6 +212,7 @@ make start        everything in Docker, ready to use
 make stop         stop the stack
 make dev          API + UI
 make smoke        creates an invoice and checks listing, detail, PDF, HTML and 404
+make sheet        checks the Google Sheets sync (credentials, tab, columns)
 make invoices     latest 20 invoices as a table
 make db-up        start the local MySQL container (dev without Docker for the app)
 make docker-up    build and start the whole stack
@@ -180,8 +226,8 @@ make clean        caches (never touches the database or the PDFs)
 ## Tests
 
 ```bash
-make test        # backend + frontend (88 tests, ~3 s)
-make test-api    # pytest only (61)
+make test        # backend + frontend (99 tests, ~4 s)
+make test-api    # pytest only (72)
 make test-web    # vitest only (27)
 ```
 
