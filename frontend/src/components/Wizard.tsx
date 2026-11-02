@@ -4,7 +4,7 @@ import { formatWorkPeriod } from '../invoiceDefaults'
 import InvoiceForm from './InvoiceForm'
 import PdfPreview from './PdfPreview'
 import ProofPreview from './ProofPreview'
-import type { CreateInvoicePayload, Invoice } from '../types'
+import type { CreateInvoicePayload, Invoice, SendInvoiceResponse, SheetResult } from '../types'
 
 interface Props {
   onCreated: () => void
@@ -12,13 +12,28 @@ interface Props {
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
 
 const STEPS: { id: Step; label: string }[] = [
   { id: 1, label: 'Invoice' },
   { id: 2, label: 'Comprobante' },
   { id: 3, label: 'Enviar' },
+  { id: 4, label: 'Finalize' },
 ]
+
+function sheetMessage(sheet: SheetResult | undefined): string {
+  if (!sheet) return 'Sin información del spreadsheet'
+  switch (sheet.status) {
+    case 'appended':
+      return `Fila agregada en ${sheet.tab ?? 'el spreadsheet'}`
+    case 'skipped':
+      return sheet.message ?? 'No se escribe en modo prueba'
+    case 'disabled':
+      return 'Desactivado (GOOGLE_SHEETS_ENABLED=0)'
+    default:
+      return sheet.message ?? 'No se pudo guardar la fila'
+  }
+}
 
 export default function Wizard({ onCreated }: Props) {
   const [step, setStep] = useState<Step>(1)
@@ -34,6 +49,8 @@ export default function Wizard({ onCreated }: Props) {
   const [to, setTo] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [result, setResult] = useState<SendInvoiceResponse | null>(null)
+  const [previewAttachments, setPreviewAttachments] = useState<string[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [subject, setSubject] = useState('')
   const [previewHtml, setPreviewHtml] = useState('')
@@ -62,6 +79,7 @@ export default function Wizard({ onCreated }: Props) {
         if (!alive) return
         setPreviewHtml(data.html)
         setPreviewSubject(data.subject)
+        setPreviewAttachments(data.attachments)
         // preload the subject only once
         setSubject((prev) => prev || data.subject)
       })
@@ -106,9 +124,11 @@ export default function Wizard({ onCreated }: Props) {
     setError(null)
     try {
       const res = await api.sendInvoice(invoice['invoice-id'], to, subject || previewSubject)
+      setResult(res)
       setSent(true)
       onCreated()
       if (res['dry-run']) setNotice(`Modo prueba: guardado en ${res.path}`)
+      setStep(4)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar')
     } finally {
@@ -119,6 +139,8 @@ export default function Wizard({ onCreated }: Props) {
   function reset() {
     setInvoice(null)
     setSent(false)
+    setResult(null)
+    setPreviewAttachments([])
     setError(null)
     setNotice(null)
     setSubject('')
@@ -253,25 +275,51 @@ export default function Wizard({ onCreated }: Props) {
           {error && <p className="error">{error}</p>}
 
           <div className="wizard-actions">
-            {sent ? (
-              <button type="button" onClick={reset}>
-                Nuevo invoice
-              </button>
-            ) : (
-              <>
-                <button type="button" className="ghost" onClick={() => setStep(2)} disabled={sending}>
-                  Atrás
-                </button>
-                <button type="button" onClick={sendInvoice} disabled={sending || !to}>
-                  {sending ? 'Enviando…' : 'Confirmar y enviar'}
-                </button>
-              </>
-            )}
+            <button type="button" className="ghost" onClick={() => setStep(2)} disabled={sending}>
+              Atrás
+            </button>
+            <button type="button" onClick={sendInvoice} disabled={sending || !to}>
+              {sending ? 'Enviando…' : 'Confirmar y enviar'}
+            </button>
           </div>
         </div>
       )}
 
-      {sent && <p className="ok">Correo enviado a {to}.</p>}
+
+      {step === 4 && invoice && result && (
+        <div className="wizard-body finalize">
+          <div className="finalize-badge" aria-hidden="true">
+            ✓
+          </div>
+
+          <div className="finalize-text">
+            <h3 className="finalize-title">
+              {result['dry-run'] ? 'Modo prueba: correo guardado' : 'Correo enviado'}
+            </h3>
+            <p className="hint">
+              Invoice <strong>{invoice['invoice-number'] || invoice['invoice-id']}</strong> ·{' '}
+              {result.to}
+            </p>
+          </div>
+
+          <dl className="finalize-list">
+            <dt>Asunto</dt>
+            <dd>{result.subject}</dd>
+            <dt>Adjuntos</dt>
+            <dd>{previewAttachments.join(' + ') || '—'}</dd>
+            <dt>Spreadsheet</dt>
+            <dd>{sheetMessage(result.sheet)}</dd>
+          </dl>
+
+          {notice && <p className="note">{notice}</p>}
+
+          <div className="wizard-actions">
+            <button type="button" onClick={reset}>
+              Nuevo invoice
+            </button>
+          </div>
+        </div>
+      )}
 
       {showPdf && <PdfPreview invoice={invoice!} onClose={() => setShowPdf(false)} />}
       {showProof && invoice && (

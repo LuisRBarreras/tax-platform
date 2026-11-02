@@ -191,6 +191,18 @@ select { width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(
 .wizard-body { display: grid; gap: 14px; }
 .wizard-summary { margin: 0; font-size: 14px; }
 .wizard-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* step 4: the send is done */
+.finalize { justify-items: center; text-align: center; padding: 8px 0 0; }
+.finalize-badge { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; font-size: 26px; font-weight: 700; }
+.finalize-title { margin: 0 0 4px; font-size: 18px; }
+.finalize-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 0;
+  padding: 14px 16px; width: 100%; text-align: left; font-size: 13px;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; }
+.finalize-list dt { color: var(--muted); font-weight: 500; }
+.finalize-list dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.finalize .wizard-actions { justify-content: center; width: 100%; }
 .hint { margin: 0; font-size: 12px; color: var(--muted); }
 
 .dropzone { display: grid; place-items: center; gap: 8px; min-height: 180px; padding: 20px;

@@ -226,9 +226,9 @@ make clean        caches (never touches the database or the PDFs)
 ## Tests
 
 ```bash
-make test        # backend + frontend (113 tests, ~4 s)
+make test        # backend + frontend (116 tests, ~4 s)
 make test-api    # pytest only (83)
-make test-web    # vitest only (30)
+make test-web    # vitest only (33)
 ```
 
 **Backend** runs against a throwaway MySQL database (`tax_platform_test`) and a temporary
