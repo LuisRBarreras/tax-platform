@@ -81,6 +81,14 @@ SMTP_DRY_RUN=0
 While `SMTP_DRY_RUN=1` (the default) nothing is sent: the email is written as an
 `.eml` file in `backend/.tmp/outbox/` so you can inspect it.
 
+This flag always lives in `backend/.env`, both with and without Docker (the file
+is mounted into the container read-only). Docker Compose does not set it, so the
+file is the single source of truth. Check the live value with:
+
+```bash
+curl -s 127.0.0.1:3000/api/mail/recipients     # {"dry-run":false} means it sends
+```
+
 > **macOS note:** the system `node` is v16 and the DeepSeek Harness runtime has a
 > hardened signature; neither works for Vite. The project uses `.tooling/node`
 > (Node 24 re-signed ad-hoc). Details in `frontend/README.md`.

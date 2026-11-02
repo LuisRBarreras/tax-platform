@@ -40,8 +40,9 @@ services:
       MYSQL_USER: ${MYSQL_USER:-tax}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-taxpass}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-tax_platform}
-      # Invoice parties and SMTP come from this file when it exists.
-      SMTP_DRY_RUN: ${SMTP_DRY_RUN:-1}
+      # SMTP, recipients and invoice parties come from the .env mounted below.
+      # Nothing is set here on purpose: an environment variable would win over
+      # .env (load_dotenv does not override) and force SMTP_DRY_RUN back to 1.
     volumes:
       # Read-only config: python-dotenv reads it inside the container and the
       # multi-line values (addresses) survive. Secrets never enter the image.
