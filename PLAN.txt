@@ -177,6 +177,18 @@ tracker spreadsheet.
 Verified: 12 new tests (mapping, payload, caching, dry-run, permission error, disabled API).
 `make sheet` reports the missing Google Sheets API activation on the real document.
 
+## Attachment names (2026-11-02)
+
+| File | Name | Example |
+|---|---|---|
+| Invoice PDF | `invoice-<invoice number>.pdf` | `invoice-455.pdf` |
+| Payment proof | `comprobante-<day>-<month>.<ext>` | `comprobante-15-nov.jpg` |
+
+The stored files keep their internal names (`.tmp/invoices/INV-<uuid>.pdf`); the
+rename happens only when the message is built, so `/pdf` and `/proof` links keep
+working. The proof date is the deposit date, then the invoice date, then today.
+The body of the email lists the same names.
+
 ## Open items
 
 - Optional: regenerate the stored PDFs of older invoices with the current template.

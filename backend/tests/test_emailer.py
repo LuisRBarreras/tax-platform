@@ -97,7 +97,8 @@ def test_attachments_include_pdf_and_proof(sample_invoice, tmp_dir):
     message = emailer.build_message(invoice, "to@example.com")
 
     names = sorted(a.get_filename() for a in message.iter_attachments())
-    assert names == ["INV-test.pdf", "INV-test.png"]
+    # Renamed on the way out, whatever the files are called on disk.
+    assert names == ["comprobante-30-oct.png", "invoice-2026-001.pdf"]
 
 
 def test_no_attachments_when_files_missing(sample_invoice):
@@ -117,4 +118,36 @@ def test_preview_has_no_binary_attachments(sample_invoice, tmp_dir):
 
     assert preview["subject"].startswith("Invoice 2026-001")
     assert "Tipo de cambio" in preview["html"]
-    assert preview["attachments"] == ["invoice en PDF"]
+    assert preview["attachments"] == ["invoice-2026-001.pdf"]  # no proof attached
+
+
+def test_pdf_name_uses_the_invoice_number():
+    assert emailer.pdf_filename({"invoice-number": "49"}) == "invoice-49.pdf"
+    assert (
+        emailer.pdf_filename({"invoice-number": "2026-010", "invoice-id": "INV-x"})
+        == "invoice-2026-010.pdf"
+    )
+
+
+def test_pdf_name_is_safe_for_slashes_and_spaces():
+    assert emailer.pdf_filename({"invoice-number": "2026/010 A"}) == "invoice-2026-010-A.pdf"
+
+
+def test_pdf_name_falls_back_to_the_invoice_id():
+    assert emailer.pdf_filename({"invoice-id": "INV-abc"}) == "invoice-INV-abc.pdf"
+
+
+def test_proof_name_uses_the_deposit_date():
+    invoice = {"deposit-date": "2026-11-15"}
+    assert emailer.proof_filename(invoice, "/tmp/x.pdf") == "comprobante-15-nov.pdf"
+    assert emailer.proof_filename(invoice, "/tmp/x.JPG") == "comprobante-15-nov.jpg"
+
+
+def test_proof_name_falls_back_to_the_invoice_date():
+    invoice = {"date": "2026-01-02"}
+    assert emailer.proof_filename(invoice, "/tmp/x.png") == "comprobante-2-ene.png"
+
+
+def test_proof_name_without_dates_uses_today():
+    name = emailer.proof_filename({}, "/tmp/x.jpeg")
+    assert name.startswith("comprobante-") and name.endswith(".jpeg")

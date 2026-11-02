@@ -1,4 +1,5 @@
 """Send the invoice email with the PDF and the payment proof attached."""
+import re
 import smtplib
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -9,6 +10,7 @@ from typing import Any, Dict, List
 from . import config
 
 MONTHS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+MONTHS_FILE = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 
 # ------------------------------------------------------------------ format --
@@ -48,6 +50,32 @@ def short_date(value: str) -> str:
     except (TypeError, ValueError):
         return ""
     return f"{parsed.day} de {MONTHS_ES[parsed.month - 1]}"
+
+
+def _slug(value: Any) -> str:
+    """Filename-safe text: '2026/010' -> '2026-010'."""
+    text = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value or "").strip())
+    return text.strip("-._") or "invoice"
+
+
+def pdf_filename(invoice: Dict[str, Any]) -> str:
+    """Attachment name of the PDF: 'invoice-<invoice number>.pdf'."""
+    return f"invoice-{_slug(invoice.get('invoice-number') or invoice.get('invoice-id'))}.pdf"
+
+
+def proof_filename(invoice: Dict[str, Any], path: str) -> str:
+    """Attachment name of the proof: 'comprobante-<day>-<month>.<ext>'.
+
+    The date is the deposit date (that is what the proof is about); the invoice
+    date and today are the fallbacks when it is missing.
+    """
+    suffix = Path(path).suffix.lower() or ".bin"
+    raw = invoice.get("deposit-date") or invoice.get("date") or ""
+    try:
+        day = datetime.strptime(str(raw), "%Y-%m-%d")
+    except (TypeError, ValueError):
+        day = datetime.now()
+    return f"comprobante-{day.day}-{MONTHS_FILE[day.month - 1]}{suffix}"
 
 
 def pesos(invoice: Dict[str, Any]) -> float:
@@ -98,9 +126,9 @@ def build_message(
     meta = getattr(invoice, "get", lambda *_: None)
     has_proof = bool(invoice.get("proof-path"))
 
-    attachments = ["Invoice en pdf"]
+    attachments = [pdf_filename(invoice)]
     if has_proof:
-        attachments.append("Comprobante del depósito")
+        attachments.append(proof_filename(invoice, invoice["proof-path"]))
 
     if not subject:
         number = invoice.get("invoice-number") or invoice["invoice-id"]
@@ -167,7 +195,7 @@ Fecha Trabajo\tFecha Depósito\tSalary\tTipo de cambio\tPesos
             Path(pdf_path).read_bytes(),
             maintype="application",
             subtype="pdf",
-            filename=Path(pdf_path).name,
+            filename=pdf_filename(invoice),
         )
 
     if has_proof and Path(invoice["proof-path"]).exists():
@@ -175,7 +203,10 @@ Fecha Trabajo\tFecha Depósito\tSalary\tTipo de cambio\tPesos
         maintype = "application" if proof.suffix.lower() == ".pdf" else "image"
         subtype = "pdf" if proof.suffix.lower() == ".pdf" else proof.suffix.lstrip(".").replace("jpg", "jpeg")
         message.add_attachment(
-            proof.read_bytes(), maintype=maintype, subtype=subtype, filename=proof.name
+            proof.read_bytes(),
+            maintype=maintype,
+            subtype=subtype,
+            filename=proof_filename(invoice, str(proof)),
         )
 
     return message
@@ -228,9 +259,9 @@ def preview(invoice: Dict[str, Any], to: str, subject: str | None = None) -> Dic
         elif part.get_content_type() == "text/plain":
             text = part.get_content()
 
-    attachments = ["invoice en PDF"]
+    attachments = [pdf_filename(invoice)]
     if invoice.get("proof-path"):
-        attachments.append("comprobante de pago")
+        attachments.append(proof_filename(invoice, invoice["proof-path"]))
 
     return {
         "to": to,
