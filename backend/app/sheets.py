@@ -33,7 +33,15 @@ ALIASES: Dict[str, tuple] = {
     "pesos": ("pesos", "mxn", "pesos mexicanos"),
     "invoice": ("invoice", "invoice no", "invoice number", "no invoice", "factura", "no factura"),
     "client": ("client", "cliente"),
-    "sent": ("enviado", "sent", "fecha envio", "sent at", "sent date"),
+    "sent": (
+        "factura enviada",
+        "enviado",
+        "enviada",
+        "sent",
+        "fecha envio",
+        "sent at",
+        "sent date",
+    ),
 }
 
 
@@ -81,8 +89,50 @@ def spreadsheet_id() -> str:
     return book
 
 
+def tabs() -> Dict[int, str]:
+    """{gid: title} of every tab in the spreadsheet."""
+    session = _authorized()
+    response = session.get(
+        f"{API}/{spreadsheet_id()}",
+        params={"fields": "sheets.properties(sheetId,title)"},
+        timeout=15,
+    )
+    if response.status_code != 200:
+        raise SheetError(_explain(response))
+    return {
+        int(sheet["properties"]["sheetId"]): sheet["properties"]["title"]
+        for sheet in response.json().get("sheets", [])
+    }
+
+
 def tab_name() -> str:
-    return config.GOOGLE_SHEETS_TAB.strip() or "Sheet1"
+    """Title of the target tab.
+
+    When a gid is configured it wins over the name, and the two must agree: the
+    gid is what the spreadsheet URL points at, so a mismatch means the name and
+    the link speak about different tabs. Failing loudly here is deliberate —
+    writing to the wrong tab is worse than not writing at all.
+    """
+    name = config.GOOGLE_SHEETS_TAB.strip()
+    gid = config.GOOGLE_SHEETS_GID.strip()
+    if not gid:
+        return name or "Sheet1"
+
+    try:
+        known = tabs()
+    except SheetError:
+        return name or "Sheet1"  # no metadata: trust the name
+
+    if int(gid) not in known:
+        raise SheetError(f"El gid {gid} no existe en la hoja.")
+    title = known[int(gid)]
+    if name and name != title:
+        raise SheetError(
+            f"GOOGLE_SHEETS_TAB dice '{name}' pero el gid {gid} es el tab "
+            f"'{title}'. Ajusta uno de los dos en backend/.env; no escribo "
+            "hasta saber cuál es el correcto."
+        )
+    return title
 
 
 def sheet_url(book: str = "") -> str:
@@ -138,7 +188,8 @@ def _explain(response) -> str:
             "Compártela como Editor con la cuenta de servicio."
         )
     if response.status_code == 404:
-        return f"No se encontró la hoja o el tab '{tab_name()}'."
+        # Not tab_name(): it talks to the API and _explain must not recurse.
+        return f"No se encontró la hoja o el tab '{config.GOOGLE_SHEETS_TAB}'."
     return f"Google Sheets respondió {response.status_code}: {message}"
 
 
@@ -175,7 +226,8 @@ def row_values(invoice: Dict[str, Any], sent_at: str = "") -> Dict[str, Any]:
         "pesos": round(emailer.pesos(invoice), 2),
         "invoice": invoice.get("invoice-number") or invoice.get("invoice-id", ""),
         "client": invoice.get("client-name", ""),
-        "sent": sent_at,
+        # The "Factura enviada" column of the tracker is a Si/No flag.
+        "sent": "Si" if sent_at else "",
     }
 
 
@@ -190,6 +242,14 @@ def build_row(
     return [known.get(_match(header), "") for header in header_row]
 
 
+def _trim(values: List[Any]) -> List[Any]:
+    """Drop trailing blanks so we never write into the summary columns."""
+    last = len(values)
+    while last and values[last - 1] == "":
+        last -= 1
+    return values[:last]
+
+
 def append_row(
     invoice: Dict[str, Any], sent_at: str = ""
 ) -> Dict[str, Any]:
@@ -197,7 +257,7 @@ def append_row(
     book = spreadsheet_id()
     if _headers is None:
         headers()  # raises SheetError when the sheet cannot be read
-    row = build_row(invoice, sent_at)
+    row = _trim(build_row(invoice, sent_at))
     range_a1 = f"'{tab_name()}'!A1"
 
     session = _authorized()
@@ -247,13 +307,16 @@ def status() -> Dict[str, Any]:
     info: Dict[str, Any] = {
         "credentials": str(credentials_path()),
         "spreadsheet": config.GOOGLE_SPREADSHEET_ID,
-        "tab": tab_name(),
+        "tab": config.GOOGLE_SHEETS_TAB,
+        "gid": config.GOOGLE_SHEETS_GID,
         "enabled": config.GOOGLE_SHEETS_ENABLED,
         "url": sheet_url(),
     }
     try:
+        tab = tab_name()
         header_row = headers(refresh=True)
-        rows = _values(f"'{tab_name()}'!A:A")
+        rows = _values(f"'{tab}'!A:A")
+        info["tab"] = tab
         info["headers"] = header_row
         info["mapping"] = {header: _match(header) for header in header_row}
         info["rows"] = max(len(rows) - 1, 0) if rows else 0

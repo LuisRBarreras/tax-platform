@@ -20,7 +20,8 @@ def main() -> int:
 
     print(f"credentials  : {info['credentials']}")
     print(f"spreadsheet  : {info['spreadsheet'] or '(vacío)'}")
-    print(f"tab          : {info['tab']}")
+    gid = f" (gid {info['gid']})" if info["gid"] else ""
+    print(f"tab          : {info['tab']}{gid}")
     print(f"enabled      : {'yes' if info['enabled'] else 'no (GOOGLE_SHEETS_ENABLED=0)'}")
 
     if not info["ok"]:

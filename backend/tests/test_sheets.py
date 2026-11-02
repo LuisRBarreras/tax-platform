@@ -15,7 +15,7 @@ HEADERS = [
     "Tipo de cambio",
     "Pesos",
     "Invoice",
-    "Enviado",
+    "Factura enviada",
     "Comentarios",
 ]
 
@@ -84,7 +84,7 @@ def test_row_follows_the_header_order(sample_invoice, fake):
         18.5,
         18500.0,
         "2026-001",
-        "2026-10-31T10:00:00+00:00",
+        "Si",
         "",
     ]
 
@@ -130,10 +130,25 @@ def test_append_posts_to_the_tab_and_inserts_rows(sample_invoice, fake):
         "valueInputOption": "USER_ENTERED",
         "insertDataOption": "INSERT_ROWS",
     }
+    # Trailing blanks are trimmed: never write into the summary columns.
     assert post["json"]["values"] == [
-        ["16 al 31 de Oct", "30 de Oct", 1000.0, 18.5, 18500.0, "2026-001",
-         "2026-10-31T10:00:00+00:00", ""]
+        ["16 al 31 de Oct", "30 de Oct", 1000.0, 18.5, 18500.0, "2026-001", "Si"]
     ]
+
+
+def test_summary_columns_to_the_right_are_not_written(sample_invoice, monkeypatch, settings):
+    """The real tab has a totals block in I1:M1: it must not widen the row."""
+    monkeypatch.setattr(sheets, "_session", None, raising=False)
+    monkeypatch.setattr(sheets, "_headers", None, raising=False)
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_TAB", "Copy of 2026")
+    fake = FakeSession(
+        header_row=["Invoice", "Fecha Trabajo", "Pesos", "Total", 445088.75, "Promedio", 63584.1]
+    )
+    monkeypatch.setattr(sheets, "_authorized", lambda: fake)
+
+    sheets.append_row(sample_invoice, "2026-10-31T10:00:00+00:00")
+
+    assert fake.posts[0]["json"]["values"] == [["2026-001", "16 al 31 de Oct", 18500.0]]
 
 
 def test_headers_are_read_once_per_process(sample_invoice, fake):
@@ -195,3 +210,24 @@ def test_missing_spreadsheet_id_says_which_variable(monkeypatch, settings):
         sheets.spreadsheet_id()
 
     assert "GOOGLE_SPREADSHEET_ID" in str(error.value)
+
+
+def test_gid_and_name_must_agree(monkeypatch, settings):
+    """The URL gid is authoritative: a name that points elsewhere is an error."""
+    monkeypatch.setattr(sheets, "tabs", lambda: {1997921848: "2026"})
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_GID", "1997921848")
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_TAB", "Copy of 2026")
+
+    with pytest.raises(sheets.SheetError) as error:
+        sheets.tab_name()
+
+    assert "Copy of 2026" in str(error.value)
+    assert "2026" in str(error.value)
+
+
+def test_gid_wins_when_the_name_is_empty(monkeypatch, settings):
+    monkeypatch.setattr(sheets, "tabs", lambda: {1859673291: "Copy of 2026"})
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_GID", "1859673291")
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_TAB", "")
+
+    assert sheets.tab_name() == "Copy of 2026"
