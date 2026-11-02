@@ -34,6 +34,9 @@ export default function EmailConfirm({ invoice, to, onCancel, onConfirm, sending
     return () => window.removeEventListener('keydown', onKey)
   }, [onCancel, sending])
 
+  // Names as the recipient will see them, straight from the backend.
+  const [pdfName, proofName] = preview?.attachments ?? []
+
   useEffect(() => {
     let alive = true
     setPreview(null)
@@ -80,7 +83,7 @@ export default function EmailConfirm({ invoice, to, onCancel, onConfirm, sending
               >
                 <span className="attachment-icon">PDF</span>
                 <span className="attachment-name">
-                  {invoice['invoice-number'] || invoice['invoice-id']}
+                  {pdfName || invoice['invoice-number'] || invoice['invoice-id']}
                 </span>
               </button>
 
@@ -96,7 +99,9 @@ export default function EmailConfirm({ invoice, to, onCancel, onConfirm, sending
                     src={`${invoiceProofUrl(invoice['invoice-id'])}?v=${encodeURIComponent(invoice['proof-path'])}`}
                     alt="Comprobante"
                   />
-                  <span className="attachment-name">Comprobante</span>
+                  <span className="attachment-name">
+                    {proofName ?? 'comprobante'}
+                  </span>
                 </button>
               ) : (
                 <span className="attachment muted-attachment">Sin comprobante</span>

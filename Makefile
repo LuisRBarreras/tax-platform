@@ -92,7 +92,7 @@ build: ## Typecheck + production build of the frontend
 	cd $(FRONTEND) && $(PNPM_CMD) run build
 
 # -------------------------------------------------------------------- tests --
-test: test-api test-web ## Run both test suites (99 tests)
+test: test-api test-web ## Run both test suites (113 tests)
 
 test-api: ## Backend tests (pytest, needs MySQL)
 	@$(PY) -c "import pytest" 2>/dev/null || $(PIP) install --quiet -r $(BACKEND)/requirements-dev.txt
