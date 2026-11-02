@@ -161,7 +161,7 @@ only stores their paths. That keeps the door open for moving PDFs to S3 by chang
 ## Spreadsheet
 
 Each invoice that is really sent appends **one row** to the tab configured in
-`backend/.env` (`GOOGLE_SHEETS_TAB`, default `Copy of 2026`).
+`backend/.env` (`GOOGLE_SHEETS_TAB`, required — there is no default in the code).
 
 ```bash
 make sheet     # does the tab answer? which column gets which value?

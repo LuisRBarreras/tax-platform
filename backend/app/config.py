@@ -76,7 +76,8 @@ SMTP_DRY_RUN = _bool("SMTP_DRY_RUN", "1")  # por seguridad: por defecto NO enví
 # needs the spreadsheet shared with it as Editor, and the Sheets API enabled.
 GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 GOOGLE_SPREADSHEET_ID = os.environ.get("GOOGLE_SPREADSHEET_ID", "")
-GOOGLE_SHEETS_TAB = os.environ.get("GOOGLE_SHEETS_TAB", "Copy of 2026")
+# No default: the tab is always configured in backend/.env.
+GOOGLE_SHEETS_TAB = os.environ.get("GOOGLE_SHEETS_TAB", "")
 GOOGLE_SHEETS_GID = os.environ.get("GOOGLE_SHEETS_GID", "")  # optional: link to the tab
 GOOGLE_SHEETS_ENABLED = _bool("GOOGLE_SHEETS_ENABLED", "1")
 GOOGLE_DOC_TEMPLATE_ID = os.environ.get("GOOGLE_DOC_TEMPLATE_ID", "")

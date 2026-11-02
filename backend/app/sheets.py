@@ -115,13 +115,21 @@ def tab_name() -> str:
     """
     name = config.GOOGLE_SHEETS_TAB.strip()
     gid = config.GOOGLE_SHEETS_GID.strip()
+
     if not gid:
-        return name or "Sheet1"
+        if not name:
+            raise SheetError(
+                "Falta GOOGLE_SHEETS_TAB en backend/.env: el tab que recibe las "
+                "filas no está configurado y no hay default."
+            )
+        return name
 
     try:
         known = tabs()
     except SheetError:
-        return name or "Sheet1"  # no metadata: trust the name
+        if not name:
+            raise
+        return name  # no metadata: trust the configured name
 
     if int(gid) not in known:
         raise SheetError(f"El gid {gid} no existe en la hoja.")
@@ -189,7 +197,8 @@ def _explain(response) -> str:
         )
     if response.status_code == 404:
         # Not tab_name(): it talks to the API and _explain must not recurse.
-        return f"No se encontró la hoja o el tab '{config.GOOGLE_SHEETS_TAB}'."
+        target = config.GOOGLE_SHEETS_TAB or f"gid {config.GOOGLE_SHEETS_GID}"
+        return f"No se encontró la hoja o el tab '{target}'."
     return f"Google Sheets respondió {response.status_code}: {message}"
 
 

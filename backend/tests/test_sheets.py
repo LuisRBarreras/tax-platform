@@ -245,3 +245,15 @@ def test_header_row_stops_at_the_totals_block(sample_invoice, monkeypatch, setti
 
     assert sheets.headers(refresh=True) == ["Invoice", "Salary", "Total"]
     assert fake.posts == []
+
+
+def test_tab_has_no_default(monkeypatch, settings):
+    """The tab always comes from .env: no name and no gid is an error."""
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_TAB", "")
+    monkeypatch.setattr(settings, "GOOGLE_SHEETS_GID", "")
+
+    with pytest.raises(sheets.SheetError) as error:
+        sheets.tab_name()
+
+    assert "GOOGLE_SHEETS_TAB" in str(error.value)
+    assert "backend/.env" in str(error.value)
