@@ -121,8 +121,10 @@ button.link-button {
 }
 button.link-button:hover { text-decoration: underline; }
 
+/* Red link (table action) vs red button (dialog confirm): the solid rule must
+   not reach the link, or it paints a red box around red text. */
 button.link-button.danger { color: #b91c1c; }
-button.danger { background: #b91c1c; border-color: #b91c1c; }
+button.danger:not(.link-button) { background: #b91c1c; border-color: #b91c1c; }
 button.ghost.danger { background: #fff; color: #b91c1c; border-color: #fecaca; }
 
 /* ---- PDF preview ---- */
