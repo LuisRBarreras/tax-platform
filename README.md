@@ -219,6 +219,7 @@ make db-up        start the local MySQL container (dev without Docker for the ap
 make docker-up    build and start the whole stack
 make db           invoices stored in MySQL
 make db-peek      table structure + latest 10 invoices
+make db-wipe      empties the database and .tmp (dumps a backup first, asks "si")
 make migrate      import invoices from the old SQLite file into MySQL
 make build        typecheck + frontend build
 make clean        caches (never touches the database or the PDFs)

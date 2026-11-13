@@ -36,7 +36,7 @@ export PATH := $(CURDIR)/.tooling:$(PATH)
 
 .DEFAULT_GOAL := help
 .PHONY: help install env template start stop check dev api web build \
-        test test-api test-web smoke sheet shortcut invoices db db-peek migrate \
+        test test-api test-web smoke sheet shortcut invoices db db-peek db-wipe migrate \
         db-up docker-up docker-down docker-logs docker-reset clean clean-all
 
 # ---------------------------------------------------------------- lifecycle --
@@ -113,6 +113,9 @@ sheet: ## Check the Google Sheets sync (credentials, tab, columns)
 # ------------------------------------------------------------------ database --
 db: ## Invoice count
 	@$(SCRIPTS)/db.sh count
+
+db-wipe: ## Empty the database and the generated files (asks first, dumps a backup)
+	@$(SCRIPTS)/db-wipe.sh
 
 db-peek: ## Table structure + latest invoices
 	@$(SCRIPTS)/db.sh peek
