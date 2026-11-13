@@ -36,7 +36,7 @@ export PATH := $(CURDIR)/.tooling:$(PATH)
 
 .DEFAULT_GOAL := help
 .PHONY: help install env template start stop check dev api web build \
-        test test-api test-web smoke sheet invoices db db-peek migrate \
+        test test-api test-web smoke sheet shortcut invoices db db-peek migrate \
         db-up docker-up docker-down docker-logs docker-reset clean clean-all
 
 # ---------------------------------------------------------------- lifecycle --
@@ -49,6 +49,9 @@ help: ## Show this help
 
 start: ## Start everything in Docker and wait until it answers
 	@$(SCRIPTS)/start.sh
+
+shortcut: ## Put a double-clickable launcher on the Desktop
+	@$(SCRIPTS)/shortcut.sh
 
 stop: ## Stop the stack (keeps the data volumes)
 	@docker compose down

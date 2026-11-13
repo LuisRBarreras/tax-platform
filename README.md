@@ -203,12 +203,13 @@ the UI shows *"El correo salió, pero no se pudo guardar en el spreadsheet"*.
 ## Commands
 
 The Makefile is deliberately thin: anything longer than a couple of lines lives in
-`scripts/` (`start.sh`, `check.sh`, `smoke.sh`, `db.sh`, `db-up.sh`, plus `lib.sh` with the
-shared helpers).
+`scripts/` (`start.sh`, `check.sh`, `smoke.sh`, `db.sh`, `db-up.sh`, `shortcut.sh`, plus
+`lib.sh` with the shared helpers).
 
 ```
 make              list every command
 make start        everything in Docker, ready to use
+make shortcut     puts a double-clickable "Invoice.command" on the Desktop
 make stop         stop the stack
 make dev          API + UI
 make smoke        creates an invoice and checks listing, detail, PDF, HTML and 404
