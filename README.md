@@ -134,6 +134,7 @@ docker/mysql-init.sql     test database and grants
 | `POST` | `/api/invoices` | Creates the invoice and builds the PDF |
 | `GET` | `/api/invoices?page=&per_page=` | Paginated list (newest first) |
 | `GET` | `/api/invoices/{id}` | Single invoice |
+| `DELETE` | `/api/invoices/{id}` | Deletes the invoice, its PDF and its proof |
 | `GET` | `/api/invoices/{id}/pdf` | Downloads the PDF |
 | `GET` | `/api/invoices/{id}/html` | Rendered invoice (preview) |
 | `POST` | `/api/invoices/{id}/upload-proof` | Uploads the payment proof (multipart, field `proof`) |
@@ -228,9 +229,9 @@ make clean        caches (never touches the database or the PDFs)
 ## Tests
 
 ```bash
-make test        # backend + frontend (116 tests, ~4 s)
-make test-api    # pytest only (83)
-make test-web    # vitest only (33)
+make test        # backend + frontend (123 tests, ~4 s)
+make test-api    # pytest only (86)
+make test-web    # vitest only (37)
 ```
 
 **Backend** runs against a throwaway MySQL database (`tax_platform_test`) and a temporary

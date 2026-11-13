@@ -1,3 +1,4 @@
+import DeleteInvoiceButton from './DeleteInvoiceButton'
 import ProofUpload from './ProofUpload'
 import type { Invoice } from '../types'
 
@@ -89,6 +90,7 @@ export default function InvoiceList({
               <th className="right">PDF</th>
               <th>Comprobante</th>
               <th className="right">Correo</th>
+              <th className="right"></th>
             </tr>
           </thead>
           <tbody>
@@ -115,6 +117,12 @@ export default function InvoiceList({
                   <button type="button" className="link-button" onClick={() => onSend(invoice)}>
                     {invoice['sent-at'] ? 'Reenviar' : 'Enviar'}
                   </button>
+                </td>
+                <td className="right">
+                  <DeleteInvoiceButton
+                    invoice={invoice}
+                    onDeleted={() => (invoices.length === 1 && page > 1 ? onPage(page - 1) : onRefresh())}
+                  />
                 </td>
               </tr>
             ))}

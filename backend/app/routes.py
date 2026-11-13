@@ -29,6 +29,11 @@ def get_invoice(invoice_id: str) -> Dict[str, Any]:
     return handlers.get_invoice(invoice_id)
 
 
+@router.delete("/invoices/{invoice_id}", tags=["invoices"])
+def delete_invoice(invoice_id: str) -> Dict[str, Any]:
+    return handlers.delete_invoice(invoice_id)
+
+
 @router.get("/invoices/{invoice_id}/pdf", tags=["invoices"])
 def get_invoice_pdf(invoice_id: str) -> FileResponse:
     return handlers.get_invoice_pdf(invoice_id)

@@ -77,6 +77,12 @@ export const api = {
       text: string
     }>(`/invoices/${id}/email-preview?to=${encodeURIComponent(to)}`),
 
+  deleteInvoice: (id: string) =>
+    request<{ success: boolean; 'invoice-id': string; 'files-removed': string[] }>(
+      `/invoices/${id}`,
+      { method: 'DELETE' },
+    ),
+
   sendInvoice: (id: string, to: string, subject?: string) =>
     request<SendInvoiceResponse>(`/invoices/${id}/send`, {
       method: 'POST',

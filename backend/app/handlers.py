@@ -64,6 +64,29 @@ def get_invoice(invoice_id: str) -> Dict[str, Any]:
     return invoice
 
 
+def delete_invoice(invoice_id: str) -> Dict[str, Any]:
+    """Remove the invoice, its PDF and its payment proof."""
+    invoice = store.get_invoice(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+    if not store.delete_invoice(invoice_id):
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+    # The row is gone: drop the files so nothing is left pointing at them.
+    removed = []
+    for key in ("pdf-path", "proof-path"):
+        path = invoice.get(key) or ""
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+                removed.append(os.path.basename(path))
+            except OSError:
+                pass  # a file we cannot delete must not fail the request
+
+    return {"success": True, "invoice-id": invoice_id, "files-removed": removed}
+
+
 def get_invoice_pdf(invoice_id: str) -> FileResponse:
     if store.get_invoice(invoice_id) is None:
         raise HTTPException(status_code=404, detail="Factura no encontrada")

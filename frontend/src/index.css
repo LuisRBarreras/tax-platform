@@ -121,6 +121,10 @@ button.link-button {
 }
 button.link-button:hover { text-decoration: underline; }
 
+button.link-button.danger { color: #b91c1c; }
+button.danger { background: #b91c1c; border-color: #b91c1c; }
+button.ghost.danger { background: #fff; color: #b91c1c; border-color: #fecaca; }
+
 /* ---- PDF preview ---- */
 .modal-backdrop {
   position: fixed;

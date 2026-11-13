@@ -1,5 +1,6 @@
 """API contract tests through the ASGI app (no network, dry-run email)."""
 import io
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -176,3 +177,24 @@ def test_no_recipients_configured(client, monkeypatch):
     response = client.post(f"/api/invoices/{invoice_id}/send", json={})
     assert response.status_code == 400
     assert "MAIL_RECIPIENTS" in response.json()["detail"]
+
+
+def test_delete_invoice_removes_the_row_and_the_files(client, tmp_dir):
+    invoice_id = client.post("/api/invoices", json=_payload()).json()["invoice-id"]
+    stored = store.get_invoice(invoice_id)
+    pdf = stored["pdf-path"]
+
+    response = client.delete(f"/api/invoices/{invoice_id}")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert store.get_invoice(invoice_id) is None
+    assert not os.path.exists(pdf)
+
+
+def test_delete_unknown_invoice_is_404(client):
+    assert client.delete("/api/invoices/INV-nope").status_code == 404
+
+
+def test_delete_rejects_a_malformed_id(client):
+    assert client.delete("/api/invoices/not-an-invoice").status_code == 404
