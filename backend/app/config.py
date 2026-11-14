@@ -43,6 +43,7 @@ INVOICE_STORE_PATH = os.environ.get("INVOICE_STORE_PATH", "resources/invoices.js
 TMP_INVOICES_DIR = ".tmp/invoices"
 PROOFS_DIR = ".tmp/proofs"
 OUTBOX_DIR = ".tmp/outbox"
+PAYABLES_DIR = ".tmp/payables"   # invoice PDFs/XMLs pulled from the mailbox
 
 # --- Database (MySQL) -------------------------------------------------------
 MYSQL_HOST = os.environ.get("MYSQL_HOST", "127.0.0.1")
@@ -70,6 +71,18 @@ MAIL_FROM = os.environ.get("MAIL_FROM", "")
 # Comma-separated allowlist. Empty means "nobody can receive" (safe default).
 MAIL_RECIPIENTS = os.environ.get("MAIL_RECIPIENTS", "")
 SMTP_DRY_RUN = _bool("SMTP_DRY_RUN", "1")  # por seguridad: por defecto NO envía
+
+# --- IMAP (invoices received by mail, the "honorarios" to pay) -------------
+# Same Gmail account and app password as SMTP: Gmail accepts both.
+IMAP_HOST = os.environ.get("IMAP_HOST", "imap.gmail.com")
+IMAP_PORT = _int("IMAP_PORT", "993")
+# Sender of the invoices to pay; empty disables the mailbox sync.
+PAYABLES_SENDER = os.environ.get("PAYABLES_SENDER", "")
+# Empty = the folder flagged \All (Gmail "Todos"), so archived mail still shows.
+PAYABLES_FOLDER = os.environ.get("PAYABLES_FOLDER", "")
+# Folder with the receipts, mounted read-only into the container: the UI lists
+# it so picking a receipt does not go through the browser's file dialog.
+RECEIPTS_DIR = os.environ.get("RECEIPTS_DIR", "/receipts")
 
 # --- Google Sheets (invoice tracker) ---------------------------------------
 # Every sent invoice appends one row to the tab below. The service account

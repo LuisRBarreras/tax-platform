@@ -43,6 +43,42 @@ CREATE TABLE IF NOT EXISTS invoices (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 """
 
+# Invoices received by mail (the "honorarios" to pay), one row per email.
+PAYABLES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS payables (
+    id               VARCHAR(64)  NOT NULL PRIMARY KEY,
+    message_id       VARCHAR(255) NOT NULL,
+    subject          VARCHAR(255) NOT NULL DEFAULT '',
+    sender           VARCHAR(255) NOT NULL DEFAULT '',
+    received_at      VARCHAR(40)  NOT NULL DEFAULT '',
+    folio            VARCHAR(32)  NOT NULL DEFAULT '',
+    total            DECIMAL(12,2) NULL,
+    subtotal         DECIMAL(12,2) NULL,
+    currency         CHAR(3)      NOT NULL DEFAULT 'MXN',
+    cfdi_fecha       CHAR(10)     NOT NULL DEFAULT '',
+    period           VARCHAR(7)   NOT NULL DEFAULT '',
+    cfdi_uuid        VARCHAR(64)  NOT NULL DEFAULT '',
+    issuer_name      VARCHAR(255) NOT NULL DEFAULT '',
+    issuer_rfc       VARCHAR(20)  NOT NULL DEFAULT '',
+    pdf_path         VARCHAR(500) NULL,
+    xml_path         VARCHAR(500) NULL,
+    status           VARCHAR(20)  NOT NULL DEFAULT 'pending',
+    replied_at       VARCHAR(40)  NULL,
+    reply_message_id VARCHAR(255) NULL,
+    paid_at          VARCHAR(40)  NULL,
+    proof_path       VARCHAR(500) NULL,
+    created_at       VARCHAR(40)  NOT NULL DEFAULT '',
+    UNIQUE KEY uniq_payables_message (message_id),
+    INDEX idx_payables_status (status),
+    INDEX idx_payables_received (received_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+# Payables columns added later (the table predates them on existing databases).
+PAYABLES_MIGRATIONS = (
+    ("period", "VARCHAR(7) NOT NULL DEFAULT ''"),
+)
+
 # Columns added after the first release: created on the fly for older databases.
 MIGRATIONS = (
     ("number", "VARCHAR(64) NOT NULL DEFAULT ''"),
@@ -85,12 +121,14 @@ def connection() -> Iterator[pymysql.connections.Connection]:
         conn.close()
 
 
-def _existing_columns(conn: pymysql.connections.Connection) -> set[str]:
+def _existing_columns(
+    conn: pymysql.connections.Connection, table: str = "invoices"
+) -> set[str]:
     with conn.cursor() as cursor:
         cursor.execute(
             "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'invoices'",
-            (config.MYSQL_DATABASE,),
+            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s",
+            (config.MYSQL_DATABASE, table),
         )
         return {row["COLUMN_NAME"] for row in cursor.fetchall()}
 
@@ -100,6 +138,7 @@ def init_db() -> None:
     with connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(SCHEMA)
+            cursor.execute(PAYABLES_SCHEMA)
 
         existing = _existing_columns(conn)
         for column, definition in MIGRATIONS:
@@ -107,6 +146,18 @@ def init_db() -> None:
                 with conn.cursor() as cursor:
                     cursor.execute(f"ALTER TABLE invoices ADD COLUMN {column} {definition}")
                 print(f"DB migrated: +{column}")
+
+        existing_payables = _existing_columns(conn, "payables")
+        for column, definition in PAYABLES_MIGRATIONS:
+            if column not in existing_payables:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"ALTER TABLE payables ADD COLUMN {column} {definition}")
+                    cursor.execute(
+                        "UPDATE payables SET period = "
+                        "DATE_FORMAT(DATE_SUB(cfdi_fecha, INTERVAL 1 MONTH), '%Y-%m') "
+                        "WHERE cfdi_fecha <> '' AND period = ''"
+                    )
+                print(f"DB migrated: payables +{column}")
 
 
 def wait_for_db(retries: int = 30, delay: float = 1.0) -> bool:

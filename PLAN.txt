@@ -189,6 +189,22 @@ rename happens only when the message is built, so `/pdf` and `/proof` links keep
 working. The proof date is the deposit date, then the invoice date, then today.
 The body of the email lists the same names.
 
+## Honorarios (invoices received by mail)
+
+The accountant sends invoices to pay from `carlavelezfacturacion@hotmail.com`.
+The app reads that mailbox over IMAP instead of asking for manual entry.
+
+| Decision | Why |
+|---|---|
+| Read the `\All` folder, not the inbox | archived mail still shows up |
+| Only subjects like `Factura 3133` | `Pago del cliente 2455` is a different mail |
+| Amounts from the CFDI XML, not the body | the XML is stamped and unambiguous |
+| "Paid" = a sent message with that Message-ID in `In-Reply-To` | server state survives; a reply from the webmail also counts |
+| Reply is threaded (`In-Reply-To`/`References`) | the accountant sees it in the same conversation |
+| Receipt attached as `comprobante-<folio>-<day>-<mon>` | same naming as the invoice proofs |
+| Files cached in `.tmp/payables/` | the download works even if the mail is deleted |
+| First sync ~35 s, later syncs fast | only unknown Message-IDs are downloaded |
+
 ## Open items
 
 - Optional: regenerate the stored PDFs of older invoices with the current template.

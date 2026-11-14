@@ -1,4 +1,5 @@
 """Send the invoice email with the PDF and the payment proof attached."""
+import html
 import re
 import smtplib
 from datetime import datetime, timezone
@@ -212,16 +213,12 @@ Fecha Trabajo\tFecha Depósito\tSalary\tTipo de cambio\tPesos
     return message
 
 
-def send_invoice_email(
-    invoice: Dict[str, Any], to: str, subject: str | None = None
-) -> Dict[str, Any]:
-    """Send the email (or write the .eml when SMTP_DRY_RUN is on)."""
-    message = build_message(invoice, to, subject=subject)
-
+def _deliver(message: EmailMessage, outbox_name: str, to: str) -> Dict[str, Any]:
+    """Send over SMTP, or write the .eml when SMTP_DRY_RUN is on."""
     if is_dry_run():
         outbox = Path(config.OUTBOX_DIR)
         outbox.mkdir(parents=True, exist_ok=True)
-        path = outbox / f"{invoice['invoice-id']}.eml"
+        path = outbox / f"{outbox_name}.eml"
         path.write_bytes(bytes(message))
         return {"dry-run": True, "path": str(path), "to": to, "subject": message["Subject"]}
 
@@ -242,6 +239,103 @@ def send_invoice_email(
         "subject": message["Subject"],
         "sent-at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def send_invoice_email(
+    invoice: Dict[str, Any], to: str, subject: str | None = None
+) -> Dict[str, Any]:
+    """Send the invoice email (or write the .eml when SMTP_DRY_RUN is on)."""
+    message = build_message(invoice, to, subject=subject)
+    return _deliver(message, invoice["invoice-id"], to)
+
+
+# ------------------------------------------------- invoices received by mail --
+def payable_reply_subject(payable: Dict[str, Any]) -> str:
+    subject = (payable.get("subject") or "").strip()
+    if not subject:
+        subject = f"Factura {payable.get('folio') or ''}".strip()
+    return subject if subject.lower().startswith("re:") else f"Re: {subject}"
+
+
+def payable_reply_body(payable: Dict[str, Any], message: str = "") -> tuple[str, str]:
+    """(text, html) of the reply. A custom `message` replaces the default text."""
+    folio = payable.get("folio") or ""
+    amount = money(payable.get("total"))
+    currency = payable.get("currency") or "MXN"
+
+    default = (
+        f"Buen día,\n\n"
+        f"Adjunto el comprobante del pago de la factura {folio} por {amount} {currency}.\n\n"
+        "Quedo al pendiente de cualquier duda.\n\n"
+        f"Saludos,\n{config.INVOICE_ISSUER_NAME}\n"
+    )
+    text_body = (message or "").strip() or default
+
+    paragraphs = [block.strip() for block in text_body.split("\n\n") if block.strip()]
+    html_body = (
+        '<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111">'
+        + "".join(
+            "<p>" + html.escape(block).replace("\n", "<br>") + "</p>" for block in paragraphs
+        )
+        + "</body></html>"
+    )
+    return text_body, html_body
+
+
+def receipt_filename(payable: Dict[str, Any], suffix: str) -> str:
+    """Name the receipt gets in the reply: comprobante-<folio>-<day>-<mon>."""
+    day = payable.get("cfdi-fecha") or ""
+    try:
+        stamp = datetime.strptime(day, "%Y-%m-%d")
+        label = f"{stamp.day}-{MONTHS_FILE[stamp.month - 1]}"
+    except (TypeError, ValueError):
+        label = datetime.now().strftime("%d-%b").lower()
+    return f"comprobante-{_slug(payable.get('folio'))}-{label}{suffix}"
+
+
+def build_payable_reply(
+    payable: Dict[str, Any], proof_path: str, to: str, message: str = ""
+) -> EmailMessage:
+    """Reply to the billing email, threaded and carrying the receipt."""
+    subject = payable_reply_subject(payable)
+    text_body, html_body = payable_reply_body(payable, message)
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["To"] = to
+    message["From"] = config.MAIL_FROM or formataddr(
+        ("Luis Ramon Barreras Sanchez", config.SMTP_USER or "no-reply@localhost")
+    )
+    original = (payable.get("message-id") or "").strip()
+    if original:
+        message["In-Reply-To"] = original
+        message["References"] = original
+
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+
+    proof = Path(proof_path)
+    if proof.exists():
+        suffix = proof.suffix.lower()
+        if suffix == ".pdf":
+            maintype, subtype = "application", "pdf"
+        else:
+            maintype, subtype = "image", suffix.lstrip(".").replace("jpg", "jpeg")
+        message.add_attachment(
+            proof.read_bytes(),
+            maintype=maintype,
+            subtype=subtype,
+            filename=receipt_filename(payable, suffix),
+        )
+
+    return message
+
+
+def send_payable_reply(
+    payable: Dict[str, Any], proof_path: str, to: str, message: str = ""
+) -> Dict[str, Any]:
+    email_message = build_payable_reply(payable, proof_path, to, message)
+    return _deliver(email_message, f"reply-{payable['id']}", to)
 
 
 def preview(invoice: Dict[str, Any], to: str, subject: str | None = None) -> Dict[str, Any]:

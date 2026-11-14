@@ -142,6 +142,11 @@ docker/mysql-init.sql     test database and grants
 | `GET` | `/api/invoices/{id}/email-preview` | Rendered email, nothing is sent |
 | `POST` | `/api/invoices/{id}/send` | Sends the email (`{to, subject}`) and appends the sheet row |
 | `GET` | `/api/mail/recipients` | Allowed recipients and dry-run status |
+| `GET` | `/api/payables?status=` | Invoices received by mail (honorarios), pending first |
+| `POST` | `/api/payables/sync` | Reads the mailbox: adds new invoices, marks answered ones paid |
+| `GET` | `/api/payables/{id}/pdf` | Downloads the invoice attached to the email |
+| `GET` | `/api/payables/{id}/proof` | Returns the uploaded payment receipt |
+| `POST` | `/api/payables/{id}/pay` | Uploads the receipt, replies to the email and marks it paid |
 
 Interactive docs: **http://127.0.0.1:3000/docs**
 

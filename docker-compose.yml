@@ -49,6 +49,9 @@ services:
       - ./backend/.env:/app/.env:ro
       # Not baked into the image (.dockerignore), mounted when it exists.
       - ./backend/resources/service-account-key.json:/app/resources/service-account-key.json:ro
+      # Receipts folder: read-only, so the UI can offer the files instead of the
+      # OS file dialog. Override RECEIPTS_HOST_DIR to point somewhere else.
+      - ${RECEIPTS_HOST_DIR:-/Users/luisbarreras/Documents/personal/Impuestos/2026/honorarios}:/receipts:ro
       - api_files:/app/.tmp
     ports:
       - "127.0.0.1:3000:3000"

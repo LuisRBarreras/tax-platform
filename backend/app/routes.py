@@ -4,7 +4,7 @@ A single router with the `/api` prefix; the logic lives in `app.handlers`.
 """
 from typing import Any, Dict
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 from . import handlers
@@ -53,6 +53,57 @@ async def upload_proof(invoice_id: str, proof: UploadFile = File(...)) -> Dict[s
 @router.get("/invoices/{invoice_id}/proof", tags=["proofs"])
 def get_proof(invoice_id: str) -> FileResponse:
     return handlers.get_proof(invoice_id)
+
+
+@router.get("/sheets", tags=["sheets"])
+def sheet_info() -> Dict[str, Any]:
+    return handlers.sheet_info()
+
+
+# ------------------------------- payables ---------------------------------
+@router.get("/payables", tags=["payables"])
+def list_payables(status: str = "") -> Dict[str, Any]:
+    return handlers.list_payables(status)
+
+
+@router.post("/payables/sync", tags=["payables"])
+def sync_payables() -> Dict[str, Any]:
+    return handlers.sync_payables()
+
+
+@router.get("/payables/{payable_id}/pdf", tags=["payables"])
+def get_payable_pdf(payable_id: str) -> FileResponse:
+    return handlers.get_payable_pdf(payable_id)
+
+
+@router.get("/payables/{payable_id}/proof", tags=["payables"])
+def get_payable_proof(payable_id: str) -> FileResponse:
+    return handlers.get_payable_proof(payable_id)
+
+
+@router.delete("/payables/{payable_id}", tags=["payables"])
+def delete_payable(payable_id: str) -> Dict[str, Any]:
+    return handlers.delete_payable(payable_id)
+
+
+@router.get("/payables/receipts", tags=["payables"])
+def list_receipts() -> Dict[str, Any]:
+    return handlers.list_receipts()
+
+
+@router.get("/payables/{payable_id}/preview", tags=["payables"])
+def preview_payable(payable_id: str, receipt: str = "") -> Dict[str, Any]:
+    return handlers.preview_payable(payable_id, receipt)
+
+
+@router.post("/payables/{payable_id}/pay", tags=["payables"])
+async def pay_payable(
+    payable_id: str,
+    proof: UploadFile | None = File(None),
+    receipt: str = Form(""),
+    message: str = Form(""),
+) -> Dict[str, Any]:
+    return await handlers.pay_payable(payable_id, proof, receipt, message)
 
 
 # -------------------------------- email -----------------------------------

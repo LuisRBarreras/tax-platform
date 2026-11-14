@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import Wizard from './components/Wizard'
 import InvoiceList from './components/InvoiceList'
+import PayablesList from './components/PayablesList'
+import PayDialog from './components/PayDialog'
 import PdfPreview from './components/PdfPreview'
 import SendEmailDialog from './components/SendEmailDialog'
 import ProofPreview from './components/ProofPreview'
 import { api } from './api'
-import type { Invoice } from './types'
+import type { Invoice, Payable } from './types'
 
 export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -17,6 +19,9 @@ export default function App() {
   const [preview, setPreview] = useState<Invoice | null>(null)
   const [sendTo, setSendTo] = useState<Invoice | null>(null)
   const [proofPreview, setProofPreview] = useState<Invoice | null>(null)
+  const [tab, setTab] = useState<'invoices' | 'payables'>('invoices')
+  const [paying, setPaying] = useState<Payable | null>(null)
+  const [payablesRefresh, setPayablesRefresh] = useState(0)
 
   const loadInvoices = useCallback(async (target = page) => {
     setLoading(true)
@@ -47,21 +52,44 @@ export default function App() {
 
       {error && <p className="error">{error}</p>}
 
+      <nav className="tabs">
+        <button
+          type="button"
+          className={`tab ${tab === 'invoices' ? 'active' : ''}`}
+          onClick={() => setTab('invoices')}
+        >
+          Facturar
+        </button>
+        <button
+          type="button"
+          className={`tab ${tab === 'payables' ? 'active' : ''}`}
+          onClick={() => setTab('payables')}
+        >
+          Honorarios
+        </button>
+      </nav>
+
       <main>
-        <Wizard onCreated={() => void loadInvoices(1)} />
-        <InvoiceList
-          invoices={invoices}
-          loading={loading}
-          onRefresh={() => void loadInvoices(page)}
-          onPreview={setPreview}
-          onProofUploaded={() => void loadInvoices(page)}
-          onSend={setSendTo}
-          onProofPreview={setProofPreview}
-          page={page}
-          pages={pages}
-          total={total}
-          onPage={(p) => setPage(p)}
-        />
+        {tab === 'invoices' ? (
+          <>
+            <Wizard onCreated={() => void loadInvoices(1)} />
+            <InvoiceList
+              invoices={invoices}
+              loading={loading}
+              onRefresh={() => void loadInvoices(page)}
+              onPreview={setPreview}
+              onProofUploaded={() => void loadInvoices(page)}
+              onSend={setSendTo}
+              onProofPreview={setProofPreview}
+              page={page}
+              pages={pages}
+              total={total}
+              onPage={(p) => setPage(p)}
+            />
+          </>
+        ) : (
+          <PayablesList key={payablesRefresh} onPay={setPaying} />
+        )}
       </main>
 
       {preview && <PdfPreview invoice={preview} onClose={() => setPreview(null)} />}
@@ -70,6 +98,13 @@ export default function App() {
           invoice={proofPreview}
           onClose={() => setProofPreview(null)}
           onUploaded={() => void loadInvoices()}
+        />
+      )}
+      {paying && (
+        <PayDialog
+          payable={paying}
+          onClose={() => setPaying(null)}
+          onPaid={() => setPayablesRefresh((n) => n + 1)}
         />
       )}
       {sendTo && (

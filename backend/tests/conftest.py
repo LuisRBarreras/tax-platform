@@ -27,6 +27,7 @@ os.environ["INVOICE_ISSUER_ADDRESS"] = "1 Test Street\nTestville"
 os.environ["INVOICE_CLIENT_NAME"] = "Test Client LLC"
 os.environ["INVOICE_CLIENT_EMAIL"] = "client@example.com"
 os.environ["INVOICE_CLIENT_ADDRESS"] = "100 Client Road\nClientville"
+os.environ["PAYABLES_SENDER"] = "billing@example.com"
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
@@ -79,9 +80,10 @@ def workdir():
 
 @pytest.fixture()
 def clean_db():
-    """Empty the invoices table before each test that touches the store."""
+    """Empty the tables before each test that touches a store."""
     with db.connection() as conn, conn.cursor() as cursor:
         cursor.execute("DELETE FROM invoices")
+        cursor.execute("DELETE FROM payables")
     yield
 
 

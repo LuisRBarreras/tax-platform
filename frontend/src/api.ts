@@ -2,6 +2,10 @@ import type {
   CreateInvoicePayload,
   CreateInvoiceResponse,
   Invoice,
+  Payable,
+  PayablesResponse,
+  Receipt,
+  SheetInfo,
   SendInvoiceResponse,
 } from './types'
 
@@ -30,6 +34,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 /** URL of the generated PDF (download). */
 export function invoicePdfUrl(id: string): string {
   return `${BASE_URL}/invoices/${id}/pdf`
+}
+
+/** Download URL of the invoice attached to a payable email. */
+export function payablePdfUrl(id: string): string {
+  return `${BASE_URL}/payables/${id}/pdf`
 }
 
 /** URL of the uploaded payment proof. */
@@ -93,6 +102,63 @@ export const api = {
     request<{ subject: string; to: string; attachments: string[]; html: string }>(
       `/invoices/${id}/email-preview?to=${encodeURIComponent(to)}&subject=${encodeURIComponent(subject)}`,
     ),
+
+  sheetInfo: () => request<SheetInfo>('/sheets'),
+
+  // --- invoices received by mail ("honorarios") ---
+  payables: (status = '') =>
+    request<PayablesResponse>(`/payables${status ? `?status=${status}` : ''}`),
+
+  syncPayables: () =>
+    request<{ success: boolean; new: number; 'marked-paid': number; counts: Record<string, number> }>(
+      '/payables/sync',
+      { method: 'POST' },
+    ),
+
+  receipts: () =>
+    request<{ receipts: Receipt[]; directory: string; available: boolean }>('/payables/receipts'),
+
+  deletePayable: (id: string) =>
+    request<{ success: boolean; 'files-removed': string[] }>(`/payables/${id}`, {
+      method: 'DELETE',
+    }),
+
+  payablePreview: (id: string, receipt = '') =>
+    request<{
+      to: string
+      subject: string
+      text: string
+      html: string
+      attachments: string[]
+    }>(`/payables/${id}/preview?receipt=${encodeURIComponent(receipt)}`),
+
+  payPayable: async (id: string, file?: File, receipt?: string, message = '') => {
+    const form = new FormData()
+    if (file) form.append('proof', file)
+    else form.append('receipt', receipt ?? '')
+    form.append('message', message)
+
+    const res = await fetch(`${BASE_URL}/payables/${id}/pay`, { method: 'POST', body: form })
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`
+      try {
+        const body = await res.json()
+        if (typeof body?.detail === 'string') detail = body.detail
+      } catch {
+        // no JSON body
+      }
+      throw new Error(detail)
+    }
+
+    return res.json() as Promise<{
+      success: boolean
+      payable: Payable
+      'dry-run': boolean
+      path?: string
+      to: string
+      subject: string
+    }>
+  },
 
   /** multipart: do NOT set Content-Type, the browser adds the boundary. */
   uploadProof: async (id: string, file: File) => {

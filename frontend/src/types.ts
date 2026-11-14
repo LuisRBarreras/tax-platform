@@ -73,3 +73,50 @@ export interface SendInvoiceResponse {
   path?: string
   sheet: SheetResult
 }
+
+/** An invoice that arrived by mail and still has to be paid ("honorarios"). */
+export interface Payable {
+  id: string
+  'message-id': string
+  subject: string
+  sender: string
+  'received-at': string
+  folio: string
+  total: number | null
+  subtotal: number | null
+  currency: string
+  'cfdi-fecha': string
+  /** Month the invoice covers: '2026-10'. */
+  period: string
+  'cfdi-uuid': string
+  'issuer-name': string
+  'issuer-rfc': string
+  'pdf-path': string | null
+  'xml-path': string | null
+  status: 'pending' | 'paid'
+  'replied-at': string | null
+  'reply-message-id': string | null
+  'paid-at': string | null
+  'proof-path': string | null
+  'created-at': string
+}
+
+export interface PayablesResponse {
+  payables: Payable[]
+  counts: Record<string, number>
+  sender: string
+}
+
+/** A file in the mounted receipts folder. */
+export interface Receipt {
+  name: string
+  size: number
+  modified: string
+}
+
+/** Where the sent invoices are logged. */
+export interface SheetInfo {
+  url: string
+  tab: string
+  enabled: boolean
+}
