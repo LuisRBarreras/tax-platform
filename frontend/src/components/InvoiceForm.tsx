@@ -125,7 +125,7 @@ export default function InvoiceForm({ onSubmit, embedded = false }: Props) {
             min="0.01"
             step="0.01"
             inputMode="decimal"
-            placeholder="4083.33"
+            placeholder="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
@@ -138,7 +138,7 @@ export default function InvoiceForm({ onSubmit, embedded = false }: Props) {
             min="0.001"
             step="0.001"
             inputMode="decimal"
-            placeholder="18.760"
+            placeholder="0"
             value={rate}
             onChange={(e) => setRate(e.target.value)}
           />
@@ -151,7 +151,7 @@ export default function InvoiceForm({ onSubmit, embedded = false }: Props) {
               min="0"
               step="0.01"
               inputMode="decimal"
-              placeholder="Automático"
+              placeholder="0"
               value={pesosInput}
               onChange={(e) => {
                 setPesosManual(true)
