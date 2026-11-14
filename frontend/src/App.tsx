@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Wizard from './components/Wizard'
 import InvoiceList from './components/InvoiceList'
 import PayablesList from './components/PayablesList'
+import SheetLink from './components/SheetLink'
 import PayDialog from './components/PayDialog'
 import PdfPreview from './components/PdfPreview'
 import SendEmailDialog from './components/SendEmailDialog'
@@ -86,6 +87,7 @@ export default function App() {
               total={total}
               onPage={(p) => setPage(p)}
             />
+            <SheetLink />
           </>
         ) : (
           <PayablesList key={payablesRefresh} onPay={setPaying} />

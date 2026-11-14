@@ -184,6 +184,10 @@ select { width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(
 .proof-view { flex: 1; overflow: auto; background: #f3f4f6; display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
 .proof-image { max-width: 100%; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); background: #fff; }
 
+/* ---- google sheets shortcut ---- */
+.sheet-link { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  margin-top: 16px; font-size: 13px; flex-wrap: wrap; }
+
 /* ---- tabs ---- */
 .tabs { display: flex; gap: 6px; margin: 0 0 16px; border-bottom: 1px solid var(--border); }
 .tab { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0;
